@@ -1,4 +1,4 @@
-; This version loops the ball moving.
+; This version pauses on vertical blank.
 RASTER=$9004
 
 BLACK=0
@@ -37,7 +37,7 @@ MAIN_LOOP
 MOVE_BALL
         LDA BALL_X
         STA OLD_BALL_X
-        LDA BALL_DIRECTION++
+        LDA BALL_DIRECTION
         AND #1
         CMP #1          ; FETCH X direction, BIT 0 being OFF is LEFT
         BNE BALL_GO_LEFT        ; NOT GOING RIGHT TO LEFT
@@ -96,6 +96,7 @@ CHANGE_BALL_DIRECTION_Y
 
 
 DRAW
+        JSR WAITFORBLANK ; WAIT FOR BLANK SO NOT TO MODIFY SCREEN WHEN BEING DISPLAYED.
         LDA OLD_BALL_X
         CMP BALL_X
         BNE ERASEBALL
@@ -128,6 +129,25 @@ DRAWBALL
         LDY BALL_X
         STA ($FB),Y
 DRAWFINISH
+        JSR WAITFORNOTBLANK ; FINISHED DRAW, WAIT TO MAKE SURE NO LONGER IN BLANK.
+        RTS
+
+
+
+; PROBABLY NEED TO JUST WAIT FOR 0 in the raster
+WAITFORBLANK
+        SEC         ; set carry bit (in SBC the borrow bit is !carry bit)
+        LDA RASTER ; the top 8 bits of the 9 bits of raster counter (0 to 27 is blanking, shift the least significant bit and vb is 0 to 13)
+        SBC $E    ; substract 14 from RASTER value
+        BPL WAITFORBLANK ; if value is positive then not in blank
+        RTS
+
+; PROBABLY NEED TO JUST WAIT FOR 27 or equivalent in the raster.
+WAITFORNOTBLANK        
+        SEC        ; set carry bit (in SBC the borrow bit is !carry bit)
+        LDA RASTER ; the top 8 bits of the 9 bits of raster counter (0 to 27 is blanking, shift the least significant bit and vb is 0 to 13)
+        SBC $E    ; substract 14 from RASTER value
+        BMI WAITFORNOTBLANK ; value is negative in blanking.
         RTS
 
 
