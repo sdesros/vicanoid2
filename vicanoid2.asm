@@ -1,4 +1,4 @@
-; this version generates a ball, re-running will move the ball.
+; This version loops the ball moving.
 RASTER=$9004
 
 BLACK=0
@@ -30,14 +30,14 @@ CLEAR_SCREEN
 ; NOTE: PROBABLY NOT THE BEST THING, PROBABLY BEST JUST TO CALCULATE Y*21 SINCE THIS WILL TAKE UP 88 BYTES?
 
 MAIN_LOOP
-        JSR DRAW            
-        JSR MOVE_BALL
-        RTS
+        JSR DRAW            ; DRAW EVERYTHING
+        JSR MOVE_BALL       ; MOVE BALL
+        JMP MAIN_LOOP
 
 MOVE_BALL
         LDA BALL_X
         STA OLD_BALL_X
-        LDA BALL_DIRECTION
+        LDA BALL_DIRECTION++
         AND #1
         CMP #1          ; FETCH X direction, BIT 0 being OFF is LEFT
         BNE BALL_GO_LEFT        ; NOT GOING RIGHT TO LEFT
@@ -93,6 +93,7 @@ CHANGE_BALL_DIRECTION_Y
         EOR #2
         STA BALL_DIRECTION
         RTS
+
 
 DRAW
         LDA OLD_BALL_X
