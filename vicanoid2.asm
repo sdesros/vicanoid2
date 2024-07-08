@@ -1,4 +1,4 @@
-; This version introduces collision with the paddle.
+; This version introduces adds scores. 10 points per hitting the paddle.
 ; CONSTANTS
 RASTER=$9004
 
@@ -18,17 +18,35 @@ DOWN_KC=$11
 
 ; GAME ASSETS
 PADDLE_Y=22
+SCORE_POS=$1E03 ; NEED TO REVISE
+SCORE_COL_POS=$9603 ; NEEDS TO MATCH ABOVE
+
 
 *=828 ; MAKE USE OF 190 EXTRA BYTES BY USING UP THE CASETTE BUFFER
 
-START                   ; INIT
+START                   
         JSR CLEAR_SCREEN
+        JSR INIT_GAME
         JMP MAIN_LOOP
+
+
+PRINT_TEXT
+        LDY #0
+WRITE_TEXT
+        LDA $(FB),Y       ;START AT POINTED ADDRESS
+        BEQ TEXT_FINISHED ;IF BYTE IS 0 then we are done
+        JSR $FFD2         ;PRINT CHAR IN ACCUMULATOR
+        INY               ;INCREASE
+        BNE WRITE_TEXT    ;if not passed 255 then we should be able to keep going.
+TEXT_FINISHED
+        RTS
+
 
 CLEAR_SCREEN
         LDA #$93      
         JSR $FFD2
         RTS
+
 
 WAITFORBLANK
         SEC         ; set carry bit (in SBC the borrow bit is !carry bit)
@@ -49,6 +67,21 @@ WAITFORNOTBLANK
 *=$1001
 
         BYTE    $0E, $10, $0A, $00, $9E, $20, $28,  $38, $32, $38, $29, $00, $00, $00
+
+
+
+INIT_GAME
+        LDA #0
+        STA SCORE
+        STA SCORE+1
+        STA SCORE+2
+DRAW_SC_TEXT
+        LDA #>SCORE_TEXT
+        STA $FC
+        LDA #<SCORE_TEXT
+        STA $FB
+        JSR PRINT_TEXT
+        RTS
 
 
 MAIN_LOOP
@@ -220,6 +253,33 @@ DRAWPADDLE
         STA ($FB),Y
         LDX PADDLE_X
         STX OLD_PADDLE_X
+DISPLAY_SCORE
+        LDX #0
+        LDY #5
+SCORE_LOOP
+        LDA SCORE,X
+        PHA             ; Copy score on stack for later
+        AND #$0F        ; Get the 4 least significant bit
+        JSR DRAW_DIGIT
+        PLA             ; Get the score on the stack
+        LSR A           ; Shift 4 times to shift the 4 most significant bits down to conver to number
+        LSR A   
+        LSR A
+        LSR A
+        JSR DRAW_DIGIT 
+        INX             
+        CPX #3
+        BNE SCORE_LOOP ; Did we do all 3 score Binary Coded Decimal bytes?
+        JMP SCORE_DRAWN
+DRAW_DIGIT
+        CLC
+        ADC #$30
+        STA SCORE_POS,Y
+        LDA #BLACK
+        STA SCORE_COL_POS,Y
+        DEY
+        RTS
+SCORE_DRAWN
 DRAWFINISH
         JSR WAITFORNOTBLANK ; FINISHED DRAW, WAIT TO MAKE SURE NO LONGER IN BLANK.
         RTS
@@ -264,10 +324,40 @@ DID_BALL_HIT_PADDLE
         BEQ BALL_HIT_PADDLE
         JMP BALL_MISSED
 BALL_HIT_PADDLE
+        JSR ADD_SCORE_10
         JSR CHANGE_BALL_DIRECTION_Y
         JSR MOVE_BALL_Y
-BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE.
+BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE HERE
 EXIT_COLLISION
+        RTS
+
+
+ADD_SCORE_10
+        SED             ; SWITCH TO BINARY CODED DECIMAL
+        CLC             ; CLEAR CARRY
+        LDA SCORE       ; GET CURRENT SCORE
+        ADC #10         ; ADD 10
+        STA SCORE       ; STASH SCORE
+        LDA SCORE+1     ; GET 2ND BYTE
+        ADC #0          ; ADD WITH CARRY IN CASE THERE'S A CARRY BIT
+        STA SCORE+1     ; STASH 2ND SCORE BIT
+        LDA SCORE+2     ; GET HIGHEST BYTE
+        ADC #0          ; ADD WITH CARRY IN CASE THERE'S A CARRY BIT
+        STA SCORE+2     ; STASH HIGHEST BYTE
+        CLD             ; CLEAR BINARY CODED DECIMAL
+        RTS
+
+
+ADD_SCORE_100 
+        SED             ; SWITCH TO BINARY CODED DECIMAL
+        CLC             ; CLEAR CARRY BIT
+        LDA SCORE+1     ; 2ND SCORE BYTE IS FOR THE 1000 AND 100 VALUES
+        ADC #01         ; ADD 1 TO THE 2ND BYTE = 100
+        STA SCORE+1     ; STASH 2ND BYTE
+        LDA SCORE+2     ; GET HIGHTEST BYTE
+        ADC #0          ; ADD WITH CARRY IN CASE THERE'S A CARRY BIT
+        STA SCORE+2     ; STASH HIGHEST BYTE
+        CLD             ; CLEAR BINARY CODED DECIMAL
         RTS
 
 
@@ -295,3 +385,9 @@ BALL_DIRECTION BITS %11
 PADDLE_X BYTE 9 
 ; PREVIOUS PADDLE X POSITION
 OLD_PADDLE_X BYTE 9
+; SCORE
+SCORE BYTE 0,0,0
+
+; TEXT
+SCORE_TEXT TEXT "{home}{black}{reverse off}sc:"
+           byte 0
