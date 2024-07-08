@@ -1,4 +1,4 @@
-; This version introduces handles sounds from ball collisions, bouncing from walls and launching from paddle
+; This version introduces different levels
 ; CONSTANTS
 RASTER=$9004
 
@@ -87,6 +87,8 @@ INIT_GAME               ; WHEN STARTING A NEW GAME
         STA SCORE       ; SET ALL OF THE SCORE BYTES TO 0
         STA SCORE+1
         STA SCORE+2
+        LDA #0
+        STA LEVEL
 INIT_LEVEL                              ; WHEN STARTING A NEW LEVEL
         LDA #GAME_STATE_BALL_LAUNCH     ; RESET THE BALL TO LAUNCH MODE
         STA GAME_STATE              
@@ -95,6 +97,99 @@ INIT_LEVEL                              ; WHEN STARTING A NEW LEVEL
         LDA #0
         STA SOUND_LENGTH
         STA SOUND_NOTE
+        LDA #9          ; RESET PADDLE POSITION
+        STA PADDLE_X
+        STA OLD_PADDLE_X
+        LDA #10         ; SET BALL X POSITION
+        STA REAL_BALL_X
+        STA OLD_BALL_X
+        LDA #20         ; SET BALL Y POSITION
+        STA REAL_BALL_Y
+        STA OLD_BALL_Y
+        LDA #2          ; SET BALL DIRECTION
+        STA BALL_DIRECTION
+        LDA #1          ; SET GAME STARTED BUT BALL NOT LAUNCH
+        STA GAME_STATE
+        JSR CLEAR_SCREEN
+        LDX LEVEL
+        CPX #0
+        BEQ DRAW_LEVEL_1
+        CPX #1
+        BEQ DRAW_LEVEL_2
+        CPX #2
+        BEQ DRAW_LEVEL_3
+        CPX #3
+        BEQ DRAW_LEVEL_4
+        CPX #4
+        BEQ DRAW_LEVEL_5
+        CPX #5
+        BEQ DRAW_LEVEL_6
+        CPX #6
+        BEQ DRAW_LEVEL_7
+        CPX #7
+        BEQ DRAW_LEVEL_8
+        LDX #0
+        STX LEVEL
+        JMP INIT_LEVEL
+DRAW_LEVEL_1
+        LDA #>LEVEL_1
+        STA $FC
+        LDA #<LEVEL_1
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_2
+        LDA #>LEVEL_2
+        STA $FC
+        LDA #<LEVEL_2
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_3
+        LDA #>LEVEL_3
+        STA $FC
+        LDA #<LEVEL_3
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_4
+        LDA #>LEVEL_4
+        STA $FC
+        LDA #<LEVEL_4
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_5
+        LDA #>LEVEL_5
+        STA $FC
+        LDA #<LEVEL_5
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_6
+        LDA #>LEVEL_6
+        STA $FC
+        LDA #<LEVEL_6
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_7
+        LDA #>LEVEL_7
+        STA $FC
+        LDA #<LEVEL_7
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+DRAW_LEVEL_8
+        LDA #>LEVEL_8
+        STA $FC
+        LDA #<LEVEL_8
+        STA $FB
+        JSR PRINT_TEXT
+        JMP SETUP_LEVEL
+SETUP_LEVEL
+        LDA LEVELS_BLOCKS,X  ; SET AMOUNT OF BLOCKS TO KNOCK DOWN
+        STA LEVEL_BLOCKS
 DRAW_SC_TEXT
         LDA #>SCORE_TEXT
         STA $FC
@@ -114,6 +209,19 @@ MAIN_LOOP
 MAIN_LOOP_MOVE_BALL
         JSR MOVE_FREE_BALL     ; MOVE BALL
         JSR CHECK_COLLISION    ; CHECK TO SEE IF THE BALL HIT ANYTHING IN NEW LOCATION
+        LDX LEVEL_BLOCKS       ; ARE ALL BLOCKS GONE?
+        CPX #0                  
+        BNE MAIN_LOOP_BALL_MOVED  ; Still have blocks remaining ignore the rest    
+        LDX LEVEL                ; increase the level 
+        INX
+        STX LEVEL
+        CPX #9                  ; are we at the last level?
+        BNE GO_TO_NEXT_LEVEL
+        LDX #0                  ; loop to first
+        STX LEVEL
+GO_TO_NEXT_LEVEL
+        JSR ADD_SCORE_100
+        JSR INIT_LEVEL
 MAIN_LOOP_BALL_MOVED
         JSR CHECK_FOR_CONTROLS ; CHECK FOR THE CONTROLS
         JSR SOUND_MANAGE       ; MANAGE THE SOUND
@@ -407,7 +515,7 @@ CHECK_COLLISION
         LDA REAL_BALL_Y
         CMP #PADDLE_Y
         BEQ DID_BALL_HIT_PADDLE
-        JMP EXIT_COLLISION ;; TODO: WILL NEED TO HANDLE HITTING A BLOCK
+        JMP DID_BALL_HIT_A_BLOCK ;; TODO: WILL NEED TO HANDLE HITTING A BLOCK
 DID_BALL_HIT_PADDLE
         LDX PADDLE_X
         CPX REAL_BALL_X
@@ -420,13 +528,38 @@ DID_BALL_HIT_PADDLE
         BEQ BALL_HIT_PADDLE
         JMP BALL_MISSED
 BALL_HIT_PADDLE
-        JSR ADD_SCORE_10
         JSR CHANGE_BALL_DIRECTION_Y
         JSR MOVE_BALL_Y
         RTS
 BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE HERE
         LDA #GAME_STATE_BALL_LAUNCH
         STA GAME_STATE
+        JMP EXIT_COLLISION
+DID_BALL_HIT_A_BLOCK
+        LDX REAL_BALL_Y
+        LDA YPOS_HI,X 
+        STA $FC
+        LDA YPOS_LOW,X 
+        STA $FB
+        LDY REAL_BALL_X
+        LDA ($FB),Y
+        CMP #32         
+        BEQ EXIT_COLLISION  ; HIT EMPTY SPACE IGNORE THE REST
+        CMP #126
+        BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+        CMP #124
+        BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+        CMP #123
+        BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+        CMP #108
+        BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+        PHA                     ; STASH FOR SAFE KEEPING
+        JSR ADD_SCORE_10        ; FOR NOW ADD SCORE AND CHANGE DIRECTION\
+        JSR CHANGE_BALL_DIRECTION_y
+        LDX LEVEL_BLOCKS        ; LOWER BLOCK REMAINING COUNT
+        DEX
+        STX LEVEL_BLOCKS        
+        PLA                     ; READ IT FOR LATER.
 EXIT_COLLISION
         RTS
 
@@ -491,7 +624,91 @@ GAME_STATE BYTE GAME_STATE_BALL_LAUNCH
 ; SOUND
 SOUND_LENGTH BYTE 0
 SOUND_NOTE BYTE 0
+; LEVEL
+LEVEL BYTE 0
+LEVEL_BLOCKS BYTE 0
+LEVELS_BLOCKS BYTE LEVEL_1_BLOCKS,LEVEL_2_BLOCKS,LEVEL_3_BLOCKS,LEVEL_4_BLOCKS,LEVEL_5_BLOCKS,LEVEL_6_BLOCKS,LEVEL_7_BLOCKS,LEVEL_8_BLOCKS
+
 
 ; TEXT
 SCORE_TEXT TEXT "{home}{black}{reverse off}sc:"
            byte 0
+
+
+;SCREEN 1 - level 1 (60 blocks) 
+LEVEL_1_BLOCKS=60
+LEVEL_1 TEXT "{home}{down}{right}{reverse on}{cyan} {blue} {purple} {red} {purple} {blue} {cyan} {green}  {yellow}  {green}  {cyan} {blue} {purple} {red} {purple} {blue} {cyan} {reverse off}{return}"
+        TEXT "{right}{reverse on} {blue} {purple} {red}e{purple} {blue} {cyan} {green} {yellow}    {green} {cyan} {blue} {purple} {red}e{purple} {blue} {cyan} {reverse off}{return}"
+        TEXT "{right}{reverse on} {blue} {purple} {red} {purple} {blue} {cyan} {green}  {yellow}  {green}  {cyan} {blue} {purple} {red} {purple} {blue} {cyan} {reverse off}{return}"
+        byte 0
+;SCREEN 2 - level 2 (88 blocks)
+LEVEL_2_BLOCKS=88
+LEVEL_2 TEXT "{home}{down}{reverse on}{black}                      {reverse off}"
+        TEXT "{reverse on}{blue}    f    ff     f     {reverse off}"
+        TEXT "{reverse on}{purple}   e             e    {reverse off}"
+        TEXT "{black}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}"
+        byte 0
+;SCREEN 3 - Level 3 (48blocks)
+LEVEL_3_BLOCKS=48
+LEVEL_3 TEXT "{home}{down}         {reverse on}{red}{169}{127}{reverse off}{return}"
+        TEXT "        {reverse on}{169}{160}{160}{127}{reverse off}{return}"
+        TEXT "       {reverse on}{169}{160}ee{160}{127}{reverse off}{return}"
+        TEXT "      {reverse on}{169}{160}{160}{172}{187}{160}{160}{127}{reverse off} {reverse on}{169}{127}{reverse off}{return}"
+        TEXT "     {reverse on}{169}{160}{160}p{reverse off}{161}{reverse on}{161}p{160}{160}{127}{reverse off}{127}{reverse on} {127}{127}{reverse off}{return}"
+        TEXT "    {reverse on}{169}{160}{160}ep{reverse off}{161}{reverse on}{161}pe{160}{160}{127}{reverse off}"
+        byte 0
+;SCREEN 4 - Level 4 (88 blocks)
+LEVEL_4_BLOCKS=88
+LEVEL_4 TEXT "{home}{down}{reverse on}{black}   {185}{185}            .  p {reverse off}"
+        TEXT "{reverse on}  {reverse off}{191}{reverse on}HQ{191}{171}Q{179}  {125} {125}        {reverse off}"
+        TEXT "{reverse on}  {191}eC{reverse off}{191}{reverse on}  .  {171}Q{179}   f  . {reverse off}"
+        TEXT "{reverse on}   {184}{184}      {125} {125}        {reverse off}"
+        byte 0
+;SCREEN 5 - level 5 (77 blocks)
+LEVEL_5_BLOCKS=71
+LEVEL_5 TEXT "{home}{down}{reverse on}{yellow}{160}{160}{reverse off}{181}C       {red}{185}{reverse on}{184}{183}{184}{reverse off}{return}"
+        TEXT "{reverse on}{yellow} {172}{reverse off}    {185}     {reverse on}{172}  {reverse off}{return}"
+        TEXT "{184} M  {170}{reverse on}p{reverse off}{181}   {188}{reverse on}   {reverse off}   {172}{reverse on}{184}{184}{reverse off}{187}"
+        TEXT "H     {184}      {reverse on}{red}  {reverse off}   {reverse on}{yellow}{181}fe{182}{reverse off}"
+        TEXT "            {reverse on}{red}{190}{172} {188}{reverse off}  {reverse on}{yellow}{181}ee{182}{reverse off}"
+        TEXT "   {reverse on}{green}{184}{184}{reverse off} {reverse on}{184}{reverse off}    {reverse on}{yellow}{187}{red}{172}{blue}{190}{184}{red}{187}{reverse off}{yellow}{187} {188}{reverse on}{185}{185}{reverse off}{190}"
+        TEXT "  {reverse on}{green}{190}  {188}{172}{reverse off}     {reverse on}{blue}{190}{172} {reverse off}{return}"
+        TEXT "  {reverse on}{green}{190}{reverse off}  {reverse on}{190}{reverse off}      {reverse on}{blue} {reverse off} {reverse on} {reverse off}{return}"
+        TEXT "  {reverse on}{green}{166}{166}{166}{166}{reverse off}      {reverse on}{black}{162}{reverse off} {reverse on}{162}{reverse off}{return}"
+        TEXT "            {reverse on}{green}{166}{166}{166}{reverse off}"
+        byte 0
+;SCREEN 6 - Level 6 (52 blocks)
+LEVEL_6_BLOCKS=52
+LEVEL_6 TEXT "{home}{down}    {reverse on}{purple}p            p{reverse off}{return}"
+        TEXT "     {reverse on}            {reverse off}{return}"
+        TEXT "       {reverse on}e  ff  e{reverse off}{return}"
+        TEXT "         {reverse on}    {reverse off}   {cyan}{166}{return}"
+        TEXT "   {reverse on}f{reverse off}  {166}      {166}{return}"
+        TEXT "   {166}             {166}{return}"
+        TEXT "        {166}{return}"
+        TEXT " {166}           {166}{return}"
+        TEXT "    {166}    {166}   {reverse on}e{reverse off}{return}"
+        TEXT "                   {166}{return}"
+        TEXT "   {166}{return}"
+        byte 0
+;SCREEN 7 - Level 7 (62 blocks)
+LEVEL_7_BLOCKS=60
+LEVEL_7 TEXT "{home}{down}   {yellow}{165}{return}"
+        TEXT " {191}  {reverse on}{191}{reverse off}  {reverse on}{black}{162}{162}{162}{162}{187}{172}{162}{162}{162}{162}{reverse off}{return}"
+        TEXT "{yellow}{164} {reverse on}{red}{190}{188}{reverse off} {yellow}{164}     {reverse on}{black}{184}{184}{reverse off}{return}"
+        TEXT "  {reverse on}{red}{187}{172}{reverse off}{black}{164}{164}{185}{185}{162}{162}{reverse on}{190}{reverse off}{190}{188}{reverse on}{188}{reverse off}{162}{162}{185}{185}{164}{164}{return}"
+        TEXT " {reverse on}{yellow}{191}{reverse off}  {191}{reverse on}{black}e{reverse off}{183}{reverse on}f{reverse off}{184}{184}{reverse on}{187}{reverse off}{purple}{188}{190}{reverse on}{black}{172}{reverse off}{184}{184}{reverse on}f{reverse off}{183}{reverse on}e{reverse off}{return}"
+        TEXT "  {yellow}{167}       {reverse on}{black}{161}{188}{190}{reverse off}{161}{return}"
+        TEXT "           {reverse on}{187}{172}{reverse off}{return}"
+        TEXT "           {167}{165}{return}"
+        TEXT "           {167}{165}{return}"
+        byte 0
+;SCREEN 8 - Level 8 77 blocks
+LEVEL_8_BLOCKS=71
+LEVEL_8 TEXT "{home}{down} {purple}UI    {162}{187}{reverse on}{184}{184}{reverse off}{172}{162}     CQC{return}"
+        TEXT "EEEE  {reverse on}{190}{172}{190}ee{188}{187}{188}{reverse off}{return}"
+        TEXT "      {188}{reverse on}{188}{162}{162}{162}{162}{190}{reverse off}{190}{return}"
+        TEXT "{yellow}{166}{166}{166}{166}{166}  {purple}{188}{reverse on}{162}{185}{185}{162}{reverse off}{190}   {yellow}{166}{166}{166}{166}{166}{166}"
+        TEXT "    {reverse on}{cyan}f{reverse off}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{reverse on}f{reverse off}{return}"
+        TEXT "{blue}{166}{166}{166}{166}{166}{166}{166}{166}      {166}{166}{166}{166}{166}{166}{166}{166}{return}"
+        byte 0
