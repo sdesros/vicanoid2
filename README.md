@@ -3,9 +3,11 @@ A game written in Assembly for the unexpected VIC-20.
 ![screenshot](https://sdesros.ca/vic20/content/vicanoid2-16.png)
 
 # About the game
-This is the first game I wrote in Assembly drawing inspiration from the (8 bit show and tell)[https://www.youtube.com/c/8bitshowandtell] videos about assembly programming for C=64.  I started to work on a follow-up to my last VIC-20 game written in basic back in 1987 [Vikanoid](https://github.com/sdesros/VICanoid)
+This is the first game I wrote in Assembly back drawing inspiration from the (8 bit show and tell)[https://www.youtube.com/c/8bitshowandtell] videos about assembly programming for C=64.  I started to work on a follow-up to my last VIC-20 game written in basic back in 1987 [Vikanoid](https://github.com/sdesros/VICanoid)
 
-The levels are all different.
+This game features 8 new levels.
+
+The commits highlight the different development stages of the game.
 
 # Instructions
 * Get a highest score while trying to clear all 8 levels of the game on a continous loop.
@@ -26,7 +28,7 @@ This repository includes a project in [CBM Prg Studio](http://www.ajordison.co.u
 
 Levels.sdd includes all of the gameplay levels.
 
-# How to runS
+# How to run
 Either build or download the .prg file(s) to run in an emulator or load into a real VIC-20 via SDIEC or other means.
 
-Game is also available to play or download on: https://sdesros.ca/vic20/?gamefile=vicanoid2-16
+Game is also available to play or download on: https://sdesros.ca/vic20/?gamefile=vicanoid2-16  (Also includes executable versions of different stages of the development process as previous versions.)
