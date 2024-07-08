@@ -1,0 +1,1567 @@
+00001  0000             ; THIS VERSION HAS VARIABLE SPEED BALL MOVEMENT FOR PLAYABILITY AND ADDS LIVES AFTER FINISHING LEVELS
+00002  0001             
+00003  0001             
+00004  0001             ;; TODO ADD LIVES ON NEW LEVEL UP TO MAX_LIVES
+00005  0001             ; CONSTANTS
+00006  0001             RASTER=$9004 
+00007  0001             
+00008  0001             GAME_STATE_BALL_LAUNCH = 1
+00009  0001             GAME_STATE_BALL_FREE = 2
+00010  0001             GAME_STATE_FIRE = 3
+00011  0001             GAME_STATE_GAME_OVER = 4
+00012  0001             
+00013  0001             ; POSSIBLE COLOURS
+00014  0001             BLACK=0
+00015  0001             WHITE=1
+00016  0001             RED=2
+00017  0001             CYAN=3
+00018  0001             PURPLE=4
+00019  0001             GREEN=5
+00020  0001             BLUE=6
+00021  0001             YELLOW=7
+00022  0001             
+00023  0001             ; SOUND CONSTANTS
+00024  0001             VOLUME=36878 
+00025  0001             VOLUME_VALUE=15 
+00026  0001             BOUNCE_SOUND=36876 
+00027  0001             BOUNCE_SOUND_VERTICAL=220 
+00028  0001             BOUNCE_SOUND_HORIZONTAL=230 
+00029  0001             BOUNCE_SOUND_LENGTH=2 
+00030  0001             LASER_SOUND_START=233 
+00031  0001             NOISE_SOUND=36877 
+00032  0001             BOOM_SOUND=128 
+00033  0001             
+00034  0001             ; KEYCODES
+00035  0001             RIGHT_KC=$1D 
+00036  0001             DOWN_KC=$11 
+00037  0001             SPACE_KC=$20 
+00038  0001             RETURN_KC=13 
+00039  0001             
+00040  0001             ; GAME ASSETS
+00041  0001             PADDLE_Y=22 
+00042  0001             SCORE_POS=$1E03 
+00043  0001             SCORE_COL_POS=$9603 ; NEEDS TO MATCH SCORE_POS
+00044  0001             FIRE_CHARACTER=30 ; ^ CHARACTER
+00045  0001             LIVES_POS=$1E0D ; NEED TO REVISE
+00046  0001             LIVES_COL_POS=$960D ; NEEDS TO MATCH ABOVE
+00047  0001             TITLE_COL_POS=$962C ; COULD BE REVISED
+00048  0001             GAME_OVER_COL_POS=$96E1; COULD BE REVISED
+00049  0001             MAX_LIVES=9 
+00050  0001             MAX_BALL_SPEED=2 ; THE SLOWEST THE BALL CAN MOVE (LARGER NUMBER IS SLOWER)
+00051  0001             SPEED_UP_COUNT=10; HOW MANY SUCCESSFUL COUNT DOES THE BALL START SPEEDING UP
+00052  0001             
+00053  0001             
+00054  0001             *=828      ; MAKE USE OF 190 EXTRA BYTES BY USING UP THE CASETTE BUFFER
+00055  033C             
+00056  033C             START      
+00057  033C  A9 EB                 LDA #235
+00058  033E  8D 0F 90              STA 36879
+00059  0341  20 91 03              JSR CLEAR_SCREEN
+00060  0344             TITLE_SCREEN 
+00061  0344  A9 1C                 LDA #>TITLE_TEXT ; HI BYTE
+00062  0346  85 FC                 STA $FC
+00063  0348  A9 F6                 LDA #<TITLE_TEXT ;LOW BYTE
+00064  034A  85 FB                 STA $FB
+00065  034C  20 84 03              JSR PRINT_TEXT
+00066  034F  A9 1D                 LDA #>PRESS_RETURN_TEXT ; HI BYTE
+00067  0351  85 FC                 STA $FC
+00068  0353  A9 61                 LDA #<PRESS_RETURN_TEXT ;LOW BYTE
+00069  0355  85 FB                 STA $FB
+00070  0357  20 84 03              JSR PRINT_TEXT
+00071  035A  A9 00                 LDA #0
+00072  035C  8D 19 18              STA LEVEL
+00073  035F             TITLE_WAIT 
+00074  035F  A2 00                 LDX #0
+00075  0361  A0 00                 LDY #0
+00076  0363             TITLE_POLL 
+00077  0363  BD 2D 18              LDA COLOUR_CYCLE,X
+00078  0366  99 2C 96              STA TITLE_COL_POS,Y
+00079  0369  E8                    INX
+00080  036A  E0 07                 CPX #7
+00081  036C  D0 02                 BNE TITLE_NEXT_CHARACTER
+00082  036E  A2 00                 LDX #0
+00083  0370             TITLE_NEXT_CHARACTER 
+00084  0370  C8                    INY
+00085  0371  C0 08                 CPY #8
+00086  0373  D0 02                 BNE TITLE_POLL_KEYBOARD
+00087  0375  A0 00                 LDY #0
+00088  0377             TITLE_POLL_KEYBOARD 
+00089  0377  20 63 17              JSR MONITOR_START_KEY
+00090  037A  C9 0D                 CMP #RETURN_KC
+00091  037C  D0 E5                 BNE TITLE_POLL
+00092  037E  20 0F 10              JSR INIT_GAME
+00093  0381  4C 0E 11              JMP MAIN_LOOP
+00094  0384             
+00095  0384             
+00096  0384             PRINT_TEXT 
+00097  0384  A0 00                 LDY #0
+00098  0386             WRITE_TEXT 
+00099  0386  B1 FB                 LDA $(FB),Y       ;START AT POINTED ADDRESS
+00100  0388  F0 06                 BEQ TEXT_FINISHED ;IF BYTE IS 0 THEN WE ARE DONE
+00101  038A  20 D2 FF              JSR $FFD2         ;PRINT CHAR IN ACCUMULATOR
+00102  038D  C8                    INY               ;INCREASE
+00103  038E  D0 F6                 BNE WRITE_TEXT    ;IF NOT PASSED 255 THEN WE SHOULD BE ABLE TO KEEP GOING.
+00104  0390             TEXT_FINISHED 
+00105  0390  60                    RTS
+00106  0391             
+00107  0391             
+00108  0391             CLEAR_SCREEN 
+00109  0391  A9 93                 LDA #$93
+00110  0393  20 D2 FF              JSR $FFD2
+00111  0396  60                    RTS
+00112  0397             
+00113  0397             
+00114  0397             WAITFORBLANK 
+00115  0397  38                    SEC         ; SET CARRY BIT (IN SBC THE BORROW BIT IS !CARRY BIT)
+00116  0398  AD 04 90              LDA RASTER ; THE TOP 8 BITS OF THE 9 BITS OF RASTER COUNTER (0 TO 27 IS BLANKING, IGNORING THE LEAST SIGNIFICANT BIT AND VB IS 0 TO 13)
+00117  039B  E5 0E                 SBC $E    ; SUBSTRACT 14 FROM RASTER VALUE
+00118  039D  10 F8                 BPL WAITFORBLANK ; IF VALUE IS POSITIVE THEN NOT IN BLANK
+00119  039F  60                    RTS
+00120  03A0             
+00121  03A0             WAITFORNOTBLANK 
+00122  03A0  38                    SEC        ; SET CARRY BIT (IN SBC THE BORROW BIT IS !CARRY BIT)
+00123  03A1  AD 04 90              LDA RASTER ; THE TOP 8 BITS OF THE 9 BITS OF RASTER COUNTER (0 TO 27 IS BLANKING, IGNORING THE LEAST SIGNIFICANT BIT AND VB IS 0 TO 13)
+00124  03A4  E5 0E                 SBC $E    ; SUBSTRACT 14 FROM RASTER VALUE
+00125  03A6  30 F8                 BMI WAITFORNOTBLANK ; VALUE IS NEGATIVE IN BLANKING.
+00126  03A8  60                    RTS
+00127  03A9             
+00128  03A9             ; 10 SYS (828) ; PUT THIS LINE IN START OF BASIC WHICH INVOKES THE INSTRUCTIONS AT 828-1019
+00129  03A9             
+00130  03A9             *=$1001
+00131  1001             
+00132  1001  0E 10 0A              BYTE    $0E, $10, $0A, $00, $9E, $20, $28,  $38, $32, $38, $29, $00, $00, $00
+00133  100F             
+00134  100F             
+00135  100F             
+00136  100F             INIT_GAME  ; WHEN STARTING A NEW GAME
+00137  100F  A9 00                 LDA #0
+00138  1011  8D 13 18              STA SCORE       ; SET ALL OF THE SCORE BYTES TO 0
+00139  1014  8D 14 18              STA SCORE+1
+00140  1017  8D 15 18              STA SCORE+2
+00141  101A  A9 03                 LDA #3
+00142  101C  8D 23 18              STA LIVES
+00143  101F             INIT_LEVEL ; WHEN STARTING A NEW LEVEL
+00144  101F  A9 01                 LDA #GAME_STATE_BALL_LAUNCH     ; RESET THE BALL TO LAUNCH MODE
+00145  1021  8D 16 18              STA GAME_STATE
+00146  1024  A9 0F                 LDA #VOLUME_VALUE               ; CLEAR ALL OF THE SOUNDS
+00147  1026  8D 0E 90              STA VOLUME
+00148  1029  A9 02                 LDA #MAX_BALL_SPEED
+00149  102B  8D 25 18              STA BALL_SPEED
+00150  102E  A9 00                 LDA #0
+00151  1030  8D 17 18              STA SOUND_LENGTH
+00152  1033  8D 18 18              STA SOUND_NOTE
+00153  1036  8D 24 18              STA LOOP
+00154  1039  8D 26 18              STA BALL_HIT_COUNT
+00155  103C  A9 09                 LDA #9          ; RESET PADDLE POSITION
+00156  103E  8D 11 18              STA PADDLE_X
+00157  1041  8D 12 18              STA OLD_PADDLE_X
+00158  1044  A9 0A                 LDA #10         ; SET BALL X POSITION
+00159  1046  8D 07 18              STA REAL_BALL_X
+00160  1049  8D 0E 18              STA OLD_BALL_X
+00161  104C  A9 14                 LDA #20         ; SET BALL Y POSITION
+00162  104E  8D 08 18              STA REAL_BALL_Y
+00163  1051  8D 0F 18              STA OLD_BALL_Y
+00164  1054  A9 02                 LDA #2          ; SET BALL DIRECTION
+00165  1056  8D 10 18              STA BALL_DIRECTION
+00166  1059  A9 01                 LDA #1          ; SET GAME STARTED BUT BALL NOT LAUNCH
+00167  105B  8D 16 18              STA GAME_STATE
+00168  105E  20 91 03              JSR CLEAR_SCREEN
+00169  1061  AE 19 18              LDX LEVEL
+00170  1064  E0 00                 CPX #0
+00171  1066  F0 24                 BEQ DRAW_LEVEL_1
+00172  1068  E0 01                 CPX #1
+00173  106A  F0 2E                 BEQ DRAW_LEVEL_2
+00174  106C  E0 02                 CPX #2
+00175  106E  F0 38                 BEQ DRAW_LEVEL_3
+00176  1070  E0 03                 CPX #3
+00177  1072  F0 42                 BEQ DRAW_LEVEL_4
+00178  1074  E0 04                 CPX #4
+00179  1076  F0 4C                 BEQ DRAW_LEVEL_5
+00180  1078  E0 05                 CPX #5
+00181  107A  F0 56                 BEQ DRAW_LEVEL_6
+00182  107C  E0 06                 CPX #6
+00183  107E  F0 60                 BEQ DRAW_LEVEL_7
+00184  1080  E0 07                 CPX #7
+00185  1082  F0 6A                 BEQ DRAW_LEVEL_8
+00186  1084  A2 00                 LDX #0
+00187  1086  8E 19 18              STX LEVEL
+00188  1089  4C 1F 10              JMP INIT_LEVEL
+00189  108C             DRAW_LEVEL_1 
+00190  108C  A9 18                 LDA #>LEVEL_1
+00191  108E  85 FC                 STA $FC
+00192  1090  A9 3C                 LDA #<LEVEL_1
+00193  1092  85 FB                 STA $FB
+00194  1094  20 84 03              JSR PRINT_TEXT
+00195  1097  4C FC 10              JMP SETUP_LEVEL
+00196  109A             DRAW_LEVEL_2 
+00197  109A  A9 18                 LDA #>LEVEL_2
+00198  109C  85 FC                 STA $FC
+00199  109E  A9 B8                 LDA #<LEVEL_2
+00200  10A0  85 FB                 STA $FB
+00201  10A2  20 84 03              JSR PRINT_TEXT
+00202  10A5  4C FC 10              JMP SETUP_LEVEL
+00203  10A8             DRAW_LEVEL_3 
+00204  10A8  A9 19                 LDA #>LEVEL_3
+00205  10AA  85 FC                 STA $FC
+00206  10AC  A9 1D                 LDA #<LEVEL_3
+00207  10AE  85 FB                 STA $FB
+00208  10B0  20 84 03              JSR PRINT_TEXT
+00209  10B3  4C FC 10              JMP SETUP_LEVEL
+00210  10B6             DRAW_LEVEL_4 
+00211  10B6  A9 19                 LDA #>LEVEL_4
+00212  10B8  85 FC                 STA $FC
+00213  10BA  A9 92                 LDA #<LEVEL_4
+00214  10BC  85 FB                 STA $FB
+00215  10BE  20 84 03              JSR PRINT_TEXT
+00216  10C1  4C FC 10              JMP SETUP_LEVEL
+00217  10C4             DRAW_LEVEL_5 
+00218  10C4  A9 19                 LDA #>LEVEL_5
+00219  10C6  85 FC                 STA $FC
+00220  10C8  A9 FA                 LDA #<LEVEL_5
+00221  10CA  85 FB                 STA $FB
+00222  10CC  20 84 03              JSR PRINT_TEXT
+00223  10CF  4C FC 10              JMP SETUP_LEVEL
+00224  10D2             DRAW_LEVEL_6 
+00225  10D2  A9 1A                 LDA #>LEVEL_6
+00226  10D4  85 FC                 STA $FC
+00227  10D6  A9 FA                 LDA #<LEVEL_6
+00228  10D8  85 FB                 STA $FB
+00229  10DA  20 84 03              JSR PRINT_TEXT
+00230  10DD  4C FC 10              JMP SETUP_LEVEL
+00231  10E0             DRAW_LEVEL_7 
+00232  10E0  A9 1B                 LDA #>LEVEL_7
+00233  10E2  85 FC                 STA $FC
+00234  10E4  A9 B6                 LDA #<LEVEL_7
+00235  10E6  85 FB                 STA $FB
+00236  10E8  20 84 03              JSR PRINT_TEXT
+00237  10EB  4C FC 10              JMP SETUP_LEVEL
+00238  10EE             DRAW_LEVEL_8 
+00239  10EE  A9 1C                 LDA #>LEVEL_8
+00240  10F0  85 FC                 STA $FC
+00241  10F2  A9 6E                 LDA #<LEVEL_8
+00242  10F4  85 FB                 STA $FB
+00243  10F6  20 84 03              JSR PRINT_TEXT
+00244  10F9  4C FC 10              JMP SETUP_LEVEL
+00245  10FC             SETUP_LEVEL 
+00246  10FC  BD 1B 18              LDA LEVELS_BLOCKS,X  ; SET AMOUNT OF BLOCKS TO KNOCK DOWN
+00247  10FF  8D 1A 18              STA LEVEL_BLOCKS
+00248  1102             DRAW_SC_TEXT 
+00249  1102  A9 18                 LDA #>SCORE_TEXT
+00250  1104  85 FC                 STA $FC
+00251  1106  A9 35                 LDA #<SCORE_TEXT
+00252  1108  85 FB                 STA $FB
+00253  110A  20 84 03              JSR PRINT_TEXT
+00254  110D  60                    RTS
+00255  110E             
+00256  110E             
+00257  110E             MAIN_LOOP
+00258  110E  20 6E 12              JSR DRAW               ; DRAW EVERYTHING
+00259  1111  AD 16 18              LDA GAME_STATE
+00260  1114  C9 04                 CMP #GAME_STATE_GAME_OVER
+00261  1116  D0 03                 BNE CHECK_NEXT_STATE
+00262  1118  4C 7D 17              JMP GAME_OVER
+00263  111B             CHECK_NEXT_STATE 
+00264  111B  C9 01                 CMP #GAME_STATE_BALL_LAUNCH
+00265  111D  D0 06                 BNE MAIN_LOOP_MOVE_BALL
+00266  111F  20 97 11              JSR MOVE_BALL_TO_LAUNCH
+00267  1122  4C 6E 11              JMP MAIN_LOOP_BALL_MOVED
+00268  1125             MAIN_LOOP_MOVE_BALL 
+00269  1125  AE 24 18              LDX LOOP
+00270  1128  E8                    INX
+00271  1129  8E 24 18              STX LOOP
+00272  112C  EC 25 18              CPX BALL_SPEED
+00273  112F  D0 3D                 BNE MAIN_LOOP_BALL_MOVED
+00274  1131  A2 00                 LDX #0
+00275  1133  8E 24 18              STX LOOP
+00276  1136  20 CA 11              JSR MOVE_FREE_BALL     ; MOVE BALL
+00277  1139  20 C6 13              JSR CHECK_COLLISION    ; CHECK TO SEE IF THE BALL HIT ANYTHING IN NEW LOCATION
+00278  113C  AE 1A 18              LDX LEVEL_BLOCKS       ; ARE ALL BLOCKS GONE?
+00279  113F  E0 00                 CPX #0
+00280  1141  D0 2B                 BNE MAIN_LOOP_BALL_MOVED  ; STILL HAVE BLOCKS REMAINING IGNORE THE REST
+00281  1143  AE 19 18              LDX LEVEL                ; INCREASE THE LEVEL
+00282  1146  E8                    INX
+00283  1147  8E 19 18              STX LEVEL
+00284  114A  E0 09                 CPX #9                  ; ARE WE AT THE LAST LEVEL?
+00285  114C  D0 05                 BNE GO_TO_NEXT_LEVEL
+00286  114E  A2 00                 LDX #0                  ; LOOP TO FIRST
+00287  1150  8E 19 18              STX LEVEL
+00288  1153             GO_TO_NEXT_LEVEL 
+00289  1153  20 4F 17              JSR ADD_SCORE_100
+00290  1156  18                    CLC
+00291  1157  AD 23 18              LDA LIVES
+00292  115A  69 03                 ADC #3
+00293  115C  8D 23 18              STA LIVES
+00294  115F  38                    SEC
+00295  1160  E9 09                 SBC #MAX_LIVES
+00296  1162  E9 01                 SBC #1
+00297  1164  30 05                 BMI LIVES_NUMBER_OKAY
+00298  1166  A9 09                 LDA #MAX_LIVES
+00299  1168  8D 23 18              STA LIVES
+00300  116B             LIVES_NUMBER_OKAY 
+00301  116B  20 1F 10              JSR INIT_LEVEL
+00302  116E             MAIN_LOOP_BALL_MOVED 
+00303  116E  20 62 13              JSR CHECK_FOR_CONTROLS ; CHECK FOR THE CONTROLS
+00304  1171  20 77 11              JSR SOUND_MANAGE       ; MANAGE THE SOUND
+00305  1174  4C 0E 11              JMP MAIN_LOOP
+00306  1177             
+00307  1177             
+00308  1177             SOUND_MANAGE 
+00309  1177  AE 17 18              LDX SOUND_LENGTH        ; CHECK TO SEE IF THE SOUND LENGTH IS ALREADY 0
+00310  117A  E0 00                 CPX #0
+00311  117C  F0 0D                 BEQ CLEAR_SOUND         ; IF IT IS CLEAR EVERYTHING.
+00312  117E  CA                    DEX                     ; IF IT ISN'T DECREASE THE COUNTER
+00313  117F  8E 17 18              STX SOUND_LENGTH
+00314  1182  AD 18 18              LDA SOUND_NOTE          ; PLAY THE NOTE
+00315  1185  8D 0C 90              STA BOUNCE_SOUND
+00316  1188  4C 96 11              JMP FINISH_SOUND
+00317  118B             CLEAR_SOUND 
+00318  118B  A9 00                 LDA #0                  ; CLEAR THE SOUND COUNTER, NOTE AND CHARACTER
+00319  118D  8D 17 18              STA SOUND_LENGTH
+00320  1190  8D 18 18              STA SOUND_NOTE
+00321  1193  8D 0C 90              STA BOUNCE_SOUND
+00322  1196             FINISH_SOUND 
+00323  1196  60                    RTS
+00324  1197             
+00325  1197             
+00326  1197             MOVE_BALL_TO_LAUNCH 
+00327  1197  AD 08 18              LDA REAL_BALL_Y
+00328  119A  8D 0F 18              STA OLD_BALL_Y
+00329  119D  38                    SEC
+00330  119E  A9 16                 LDA #PADDLE_Y
+00331  11A0  E9 01                 SBC #1
+00332  11A2  8D 08 18              STA REAL_BALL_Y
+00333  11A5  18                    CLC
+00334  11A6  2A                    ROL
+00335  11A7  18                    CLC
+00336  11A8  69 01                 ADC #1
+00337  11AA  8D 06 18              STA BALL_Y
+00338  11AD  AD 07 18              LDA REAL_BALL_X
+00339  11B0  8D 0E 18              STA OLD_BALL_X
+00340  11B3  18                    CLC
+00341  11B4  AD 11 18              LDA PADDLE_X
+00342  11B7  69 01                 ADC #1
+00343  11B9  8D 07 18              STA REAL_BALL_X
+00344  11BC  18                    CLC
+00345  11BD  2A                    ROL
+00346  11BE  8D 05 18              STA BALL_X
+00347  11C1  A2 02                 LDX #$2
+00348  11C3  BD 0A 18              LDA BALL_CHARS,X
+00349  11C6  8D 09 18              STA BALL_CHAR
+00350  11C9  60                    RTS
+00351  11CA             
+00352  11CA             
+00353  11CA             MOVE_FREE_BALL 
+00354  11CA  AD 07 18              LDA REAL_BALL_X
+00355  11CD  8D 0E 18              STA OLD_BALL_X
+00356  11D0  AD 10 18              LDA BALL_DIRECTION
+00357  11D3  29 01                 AND #1
+00358  11D5  F0 0D                 BEQ BALL_GO_LEFT        ; NOT GOING RIGHT TO LEFT
+00359  11D7             BALL_GO_RIGHT 
+00360  11D7  AD 05 18              LDA BALL_X          ; GETTING IT AGAIN BECAUSE REFETCHING IT FOR JUMP FROM LEFT
+00361  11DA  18                    CLC             ; CLEAR CARRY NOT TO MESS UP CALCULATION
+00362  11DB  69 01                 ADC #1          ; ADD ONE
+00363  11DD  C9 2C                 CMP #44
+00364  11DF  D0 11                 BNE BALL_X_POSITION_OK   ;NOT AT EDGE OF THE SCREEN
+00365  11E1  20 48 12              JSR CHANGE_BALL_DIRECTION_X
+00366  11E4             BALL_GO_LEFT 
+00367  11E4  38                    SEC             ; SET CARRY BIT (IN SBC THE BORROW BIT IS !CARRY BIT)
+00368  11E5  AD 05 18              LDA BALL_X      ; LOAD DIRECTION
+00369  11E8  E9 01                 SBC #1
+00370  11EA  10 06                 BPL BALL_X_POSITION_OK   ; NOT NEGATIVE WE'RE GOOD
+00371  11EC  20 48 12              JSR CHANGE_BALL_DIRECTION_X
+00372  11EF  4C D7 11              JMP BALL_GO_RIGHT
+00373  11F2             BALL_X_POSITION_OK 
+00374  11F2  8D 05 18              STA BALL_X
+00375  11F5  AD 08 18              LDA REAL_BALL_Y
+00376  11F8  8D 0F 18              STA OLD_BALL_Y
+00377  11FB             MOVE_BALL_Y 
+00378  11FB  AD 06 18              LDA BALL_Y
+00379  11FE  AD 10 18              LDA BALL_DIRECTION
+00380  1201  29 02                 AND #2                 ; FETCH Y DIRECTION
+00381  1203  F0 0D                 BEQ BALL_GO_UP          ; GOING UP
+00382  1205             BALL_GO_DOWN 
+00383  1205  AD 06 18              LDA BALL_Y          ; GETTING IT AGAIN BECAUSE REFETCHING IT FOR JUMP FROM DOWN
+00384  1208  18                    CLC             ; CLEAR CARRY NOT TO MESS UP CALCULATION
+00385  1209  69 01                 ADC #1          ; ADD ONE
+00386  120B  C9 2E                 CMP #46
+00387  120D  D0 13                 BNE BALL_Y_POSITION_OK   ;NOT AT EDGE OF THE SCREEN
+00388  120F  20 5B 12              JSR CHANGE_BALL_DIRECTION_Y
+00389  1212             BALL_GO_UP 
+00390  1212  38                    SEC             ; SET CARRY BIT (IN SBC THE BORROW BIT IS !CARRY BIT)
+00391  1213  AD 06 18              LDA BALL_Y          ; LOAD POSITION
+00392  1216  E9 01                 SBC #1          ; SUBSTRACT 1
+00393  1218  C9 01                 CMP #1          ; ARE WE ON TOP ROW (SCORE)
+00394  121A  D0 06                 BNE BALL_Y_POSITION_OK   ; NOT ON TOP ROW
+00395  121C  20 5B 12              JSR CHANGE_BALL_DIRECTION_Y
+00396  121F  4C 05 12              JMP BALL_GO_DOWN
+00397  1222             BALL_Y_POSITION_OK 
+00398  1222  8D 06 18              STA BALL_Y
+00399  1225             CALC_REAL_BALL_Y 
+00400  1225  18                    CLC              ; CLEAR CARRY
+00401  1226  AD 06 18              LDA BALL_Y       ; LOAD BALL Y
+00402  1229  6A                    ROR              ; DIVIDE /2
+00403  122A  8D 08 18              STA REAL_BALL_Y  ; STORE AS CHARACTER LOCATION
+00404  122D  B0 05                 BCS LOWER_BALL_CHARS  ; IF THE CARRY IS SET THAT MEANT LOWER SIGNIFICAN BIT WAS ON THE LOWER
+00405  122F  A0 00                 LDY #$0          ; SET Y REGISTER WITH OFFSET FOR UPPER BALL CHARS
+00406  1231  4C 36 12              JMP CALC_HORIZONTAL_BALL_CHAR
+00407  1234             LOWER_BALL_CHARS 
+00408  1234  A0 02                 LDY #$2 ; SET Y REGISTER WITH OFFSET FOR LOWER BALL CHARS
+00409  1236             CALC_HORIZONTAL_BALL_CHAR 
+00410  1236  18                    CLC             ; CLEAR CARRY
+00411  1237  AD 05 18              LDA BALL_X      ; LOAD BALL_X
+00412  123A  6A                    ROR             ; ROTATE RIGHT TO DIVIDE/2
+00413  123B  8D 07 18              STA REAL_BALL_X ; SAVE REAL CHARACTER POSITION
+00414  123E  90 01                 BCC RIGHT_BALL_CHARS ; IF CARRY IS NOT SET THEN WE'RE IN THE LEFT CHARACTER SET
+00415  1240  C8                    INY             ; OFFSET CHAR INDEX BY 1
+00416  1241             RIGHT_BALL_CHARS 
+00417  1241  B9 0A 18              LDA BALL_CHARS,Y ; LOAD THE CORRECT CHARACTER
+00418  1244  8D 09 18              STA BALL_CHAR ; STASH IT
+00419  1247  60                    RTS
+00420  1248             
+00421  1248             
+00422  1248             CHANGE_BALL_DIRECTION_X 
+00423  1248  AD 10 18              LDA BALL_DIRECTION
+00424  124B  49 01                 EOR #1
+00425  124D  8D 10 18              STA BALL_DIRECTION
+00426  1250  A9 E6                 LDA #BOUNCE_SOUND_HORIZONTAL
+00427  1252  8D 18 18              STA SOUND_NOTE
+00428  1255  A9 02                 LDA #BOUNCE_SOUND_LENGTH
+00429  1257  8D 17 18              STA SOUND_LENGTH
+00430  125A  60                    RTS
+00431  125B             
+00432  125B             CHANGE_BALL_DIRECTION_Y 
+00433  125B  AD 10 18              LDA BALL_DIRECTION
+00434  125E  49 02                 EOR #2
+00435  1260  8D 10 18              STA BALL_DIRECTION
+00436  1263  A9 DC                 LDA #BOUNCE_SOUND_VERTICAL
+00437  1265  8D 18 18              STA SOUND_NOTE
+00438  1268  A9 02                 LDA #BOUNCE_SOUND_LENGTH
+00439  126A  8D 17 18              STA SOUND_LENGTH
+00440  126D  60                    RTS
+00441  126E             
+00442  126E             
+00443  126E             DRAW
+00444  126E  20 97 03              JSR WAITFORBLANK ; WAIT FOR BLANK SO NOT TO MODIFY SCREEN WHEN BEING DISPLAYED.
+00445  1271  AD 0E 18              LDA OLD_BALL_X ; LOAD OLD BALL_X
+00446  1274  CD 07 18              CMP REAL_BALL_X     ; COMPARE WITH PSEUDO POSITION
+00447  1277  D0 0B                 BNE ERASEBALL  ; IF DOESN'T MATCH ERASE THE REAL CHARACTER.
+00448  1279  AD 0F 18              LDA OLD_BALL_Y
+00449  127C  CD 08 18              CMP REAL_BALL_Y
+00450  127F  D0 03                 BNE ERASEBALL
+00451  1281  4C 98 12              JMP DRAWBALL
+00452  1284             ERASEBALL
+00453  1284  AE 0F 18              LDX OLD_BALL_Y
+00454  1287  BD C0 17              LDA YPOS_HI,X  ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00455  128A  85 FC                 STA $FC
+00456  128C  BD D7 17              LDA YPOS_LOW,X
+00457  128F  85 FB                 STA $FB
+00458  1291  A9 20                 LDA #32        ; NO CAN USE ZERO PAGE INDIEX TO SET SPACE_CHAR TO Y
+00459  1293  AC 0E 18              LDY OLD_BALL_X
+00460  1296  91 FB                 STA ($FB),Y
+00461  1298             DRAWBALL   ; TODO: MOVE ALL OF THIS CONVERSION OUTSIDE OF THE DRAWING
+00462  1298  AE 08 18              LDX REAL_BALL_Y
+00463  129B  BD C0 17              LDA YPOS_HI,X ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00464  129E  85 FC                 STA $FC
+00465  12A0  BD D7 17              LDA YPOS_LOW,X
+00466  12A3  85 FB                 STA $FB
+00467  12A5  AD 09 18              LDA BALL_CHAR    ; STASH THE BALL CHARACTER USING ZERO PAGE INDEX
+00468  12A8  AC 07 18              LDY REAL_BALL_X
+00469  12AB  91 FB                 STA ($FB),Y
+00470  12AD  AE 08 18              LDX REAL_BALL_Y        ; NOW DO THE SAME TO STASH THE COLOUR IN THE RIGHT POSITION
+00471  12B0  BD EE 17              LDA YCOL_HI,X ; DOES IT MAKE SENSE TO MAKE THIS HAPPEN ONLY WHEN ERASE BALL IS CALLED?
+00472  12B3  85 FC                 STA $FC
+00473  12B5  A9 00                 LDA #BLACK
+00474  12B7  AC 07 18              LDY REAL_BALL_X
+00475  12BA  91 FB                 STA ($FB),Y
+00476  12BC             PADDLE
+00477  12BC  AD 12 18              LDA OLD_PADDLE_X
+00478  12BF  CD 11 18              CMP PADDLE_X
+00479  12C2  D0 03                 BNE ERASEPADDLE
+00480  12C4  4C E0 12              JMP DRAWPADDLE
+00481  12C7             ERASEPADDLE 
+00482  12C7  A2 16                 LDX #PADDLE_Y
+00483  12C9  BD C0 17              LDA YPOS_HI,X  ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00484  12CC  85 FC                 STA $FC
+00485  12CE  BD D7 17              LDA YPOS_LOW,X
+00486  12D1  85 FB                 STA $FB
+00487  12D3  A9 20                 LDA #32        ; NO CAN USE ZERO PAGE INDEX TO SET SPACE_CHAR TO Y
+00488  12D5  AC 12 18              LDY OLD_PADDLE_X
+00489  12D8  91 FB                 STA ($FB),Y
+00490  12DA  C8                    INY
+00491  12DB  91 FB                 STA ($FB),Y
+00492  12DD  C8                    INY
+00493  12DE  91 FB                 STA ($FB),Y
+00494  12E0             DRAWPADDLE 
+00495  12E0  A2 16                 LDX #PADDLE_Y
+00496  12E2  BD C0 17              LDA YPOS_HI,X ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00497  12E5  85 FC                 STA $FC
+00498  12E7  BD D7 17              LDA YPOS_LOW,X
+00499  12EA  85 FB                 STA $FB
+00500  12EC  A9 EC                 LDA #$EC       ; STASH THE PADDLE CHARACTER USING ZERO PAGE INDEX
+00501  12EE  AC 11 18              LDY PADDLE_X
+00502  12F1  91 FB                 STA ($FB),Y
+00503  12F3  A9 E2                 LDA #$E2
+00504  12F5  C8                    INY
+00505  12F6  91 FB                 STA ($FB),Y
+00506  12F8  A9 FB                 LDA #$FB
+00507  12FA  C8                    INY
+00508  12FB  91 FB                 STA ($FB),Y
+00509  12FD  A2 16                 LDX #PADDLE_Y       ; NOW DO THE SAME TO STASH THE COLOUR IN THE RIGHT POSITION
+00510  12FF  BD EE 17              LDA YCOL_HI,X
+00511  1302  85 FC                 STA $FC
+00512  1304  A9 06                 LDA #BLUE
+00513  1306  AC 11 18              LDY PADDLE_X
+00514  1309  91 FB                 STA ($FB),Y
+00515  130B  C8                    INY
+00516  130C  91 FB                 STA ($FB),Y
+00517  130E  C8                    INY
+00518  130F  91 FB                 STA ($FB),Y
+00519  1311  AE 11 18              LDX PADDLE_X
+00520  1314  8E 12 18              STX OLD_PADDLE_X
+00521  1317             DISPLAY_SCORE 
+00522  1317  A2 00                 LDX #0
+00523  1319  A0 05                 LDY #5
+00524  131B             SCORE_LOOP 
+00525  131B  BD 13 18              LDA SCORE,X
+00526  131E  48                    PHA             ; COPY SCORE ON STACK FOR LATER
+00527  131F  29 0F                 AND #$0F        ; GET THE 4 LEAST SIGNIFICANT BIT
+00528  1321  20 34 13              JSR DRAW_DIGIT
+00529  1324  68                    PLA             ; GET THE SCORE ON THE STACK
+00530  1325  4A                    LSR A           ; SHIFT 4 TIMES TO SHIFT THE 4 MOST SIGNIFICANT BITS DOWN TO CONVER TO NUMBER
+00531  1326  4A                    LSR A
+00532  1327  4A                    LSR A
+00533  1328  4A                    LSR A
+00534  1329  20 34 13              JSR DRAW_DIGIT
+00535  132C  E8                    INX
+00536  132D  E0 03                 CPX #3
+00537  132F  D0 EA                 BNE SCORE_LOOP ; DID WE DO ALL 3 SCORE BINARY CODED DECIMAL BYTES?
+00538  1331  4C 41 13              JMP SCORE_DRAWN
+00539  1334             DRAW_DIGIT 
+00540  1334  18                    CLC
+00541  1335  69 30                 ADC #$30
+00542  1337  99 03 1E              STA SCORE_POS,Y
+00543  133A  A9 00                 LDA #BLACK
+00544  133C  99 03 96              STA SCORE_COL_POS,Y
+00545  133F  88                    DEY
+00546  1340  60                    RTS
+00547  1341             SCORE_DRAWN 
+00548  1341             DISPLAY_LIVES 
+00549  1341  A2 09                 LDX #MAX_LIVES
+00550  1343  A0 00                 LDY #0
+00551  1345  A9 20                 LDA #32
+00552  1347             LIVES_LOOP 
+00553  1347  EC 23 18              CPX LIVES
+00554  134A  D0 02                 BNE CONTINUE_LIVES
+00555  134C  A9 51                 LDA #81
+00556  134E             CONTINUE_LIVES 
+00557  134E  99 0D 1E              STA LIVES_POS,Y
+00558  1351  48                    PHA
+00559  1352  A9 00                 LDA #BLACK
+00560  1354  99 0D 96              STA LIVES_COL_POS,Y
+00561  1357  68                    PLA
+00562  1358  C8                    INY
+00563  1359  CA                    DEX
+00564  135A  E0 00                 CPX #0
+00565  135C  D0 E9                 BNE LIVES_LOOP
+00566  135E             DRAWFINISH 
+00567  135E  20 A0 03              JSR WAITFORNOTBLANK ; FINISHED DRAW, WAIT TO MAKE SURE NO LONGER IN BLANK.
+00568  1361  60                    RTS
+00569  1362             
+00570  1362             
+00571  1362             CHECK_FOR_CONTROLS 
+00572  1362  20 E4 FF              JSR $FFE4       ;SCAN KEYBOARD AND PUT KEYCODE IN ACCUMULATOR
+00573  1365  C9 1D                 CMP #RIGHT_KC   ;CHECK FOR RIGHT KEYCODE
+00574  1367  D0 13                 BNE CHECK_DOWN
+00575  1369  AE 11 18              LDX PADDLE_X    ; MOVE PADDLE RIGHT
+00576  136C  E8                    INX             ; INCREASE POSITION BY 1
+00577  136D  E0 14                 CPX #20
+00578  136F  F0 41                 BEQ FINISHED_CHECK_FOR_CONTROLS ; IF PADDLE IS AT RIGHT EDGE LEAVE
+00579  1371  E8                    INX             ; INCREASE POSITION BY 1
+00580  1372  E0 14                 CPX #20
+00581  1374  D0 02                 BNE CHECK_STORE_X
+00582  1376  A2 13                 LDX #19
+00583  1378             CHECK_STORE_X 
+00584  1378  8E 11 18              STX PADDLE_X    ; STASH
+00585  137B  60                    RTS
+00586  137C             CHECK_DOWN 
+00587  137C  C9 11                 CMP #DOWN_KC
+00588  137E  D0 0F                 BNE CHECK_SPACE ; IF HERE AND NOT DOWN KEYCODE LEAVE
+00589  1380  AE 11 18              LDX PADDLE_X
+00590  1383  CA                    DEX               ; DECREASE PADDLE
+00591  1384  30 2C                 BMI FINISHED_CHECK_FOR_CONTROLS ; IF PAST LEFT EDGE DON'T SAVE
+00592  1386  CA                    DEX
+00593  1387  10 EF                 BPL CHECK_STORE_X
+00594  1389  A2 00                 LDX #0
+00595  138B  8E 11 18              STX PADDLE_X
+00596  138E  60                    RTS
+00597  138F             CHECK_SPACE 
+00598  138F  C9 20                 CMP #SPACE_KC
+00599  1391  D0 1F                 BNE FINISHED_CHECK_FOR_CONTROLS ; TODO NEXT CONTROL?
+00600  1393  AE 16 18              LDX GAME_STATE
+00601  1396  E0 01                 CPX #GAME_STATE_BALL_LAUNCH
+00602  1398  D0 18                 BNE FINISHED_CHECK_FOR_CONTROLS ; OTHER STATES? I.E. FIRE?
+00603  139A  A2 02                 LDX #GAME_STATE_BALL_FREE
+00604  139C  8E 16 18              STX GAME_STATE
+00605  139F  AD 10 18              LDA BALL_DIRECTION ; FORCE BALL TO GO UP. MAY NOT BE OKAY
+00606  13A2  29 01                 AND #1
+00607  13A4  8D 10 18              STA BALL_DIRECTION
+00608  13A7  A9 DC                 LDA #BOUNCE_SOUND_VERTICAL
+00609  13A9  8D 18 18              STA SOUND_NOTE
+00610  13AC  A9 02                 LDA #BOUNCE_SOUND_LENGTH
+00611  13AE  8D 17 18              STA SOUND_LENGTH
+00612  13B1  60                    RTS
+00613  13B2             FINISHED_CHECK_FOR_CONTROLS 
+00614  13B2  60                    RTS
+00615  13B3             
+00616  13B3             
+00617  13B3             BALL_MISSED_DELAY 
+00618  13B3  A2 04                 LDX #4
+00619  13B5             BALL_MISSED_DELAY_LOOP 
+00620  13B5  CA                    DEX
+00621  13B6  30 0D                 BMI BALL_MISSED_LEAVE_DELAY
+00622  13B8  8A                    TXA
+00623  13B9  48                    PHA
+00624  13BA  20 97 03              JSR WAITFORBLANK
+00625  13BD  20 A0 03              JSR WAITFORNOTBLANK
+00626  13C0  68                    PLA
+00627  13C1  AA                    TAX
+00628  13C2  4C B5 13              JMP BALL_MISSED_DELAY_LOOP
+00629  13C5             BALL_MISSED_LEAVE_DELAY 
+00630  13C5  60                    RTS
+00631  13C6             
+00632  13C6             CHECK_COLLISION 
+00633  13C6  AD 08 18              LDA REAL_BALL_Y
+00634  13C9  C9 16                 CMP #PADDLE_Y
+00635  13CB  F0 03                 BEQ DID_BALL_HIT_PADDLE
+00636  13CD  4C 73 14              JMP DID_BALL_HIT_A_BLOCK ;; TODO: WILL NEED TO HANDLE HITTING A BLOCK
+00637  13D0             DID_BALL_HIT_PADDLE 
+00638  13D0  AE 11 18              LDX PADDLE_X
+00639  13D3  EC 07 18              CPX REAL_BALL_X
+00640  13D6  F0 0F                 BEQ BALL_HIT_PADDLE
+00641  13D8  E8                    INX
+00642  13D9  EC 07 18              CPX REAL_BALL_X
+00643  13DC  F0 09                 BEQ BALL_HIT_PADDLE
+00644  13DE  E8                    INX
+00645  13DF  EC 07 18              CPX REAL_BALL_X
+00646  13E2  F0 03                 BEQ BALL_HIT_PADDLE
+00647  13E4  4C 0E 14              JMP BALL_MISSED
+00648  13E7             BALL_HIT_PADDLE 
+00649  13E7  20 5B 12              JSR CHANGE_BALL_DIRECTION_Y
+00650  13EA  20 FB 11              JSR MOVE_BALL_Y
+00651  13ED  AE 26 18              LDX BALL_HIT_COUNT
+00652  13F0  E8                    INX
+00653  13F1  8E 26 18              STX BALL_HIT_COUNT
+00654  13F4  E0 0A                 CPX #SPEED_UP_COUNT
+00655  13F6  D0 15                 BNE END_BALL_HIT_PADDLE
+00656  13F8  A2 00                 LDX #0
+00657  13FA  8E 26 18              STX BALL_HIT_COUNT
+00658  13FD  AE 25 18              LDX BALL_SPEED
+00659  1400  CA                    DEX
+00660  1401  8E 25 18              STX BALL_SPEED
+00661  1404  E0 00                 CPX #0
+00662  1406  D0 05                 BNE END_BALL_HIT_PADDLE
+00663  1408  A2 01                 LDX #1
+00664  140A  8E 25 18              STX BALL_SPEED
+00665  140D             END_BALL_HIT_PADDLE 
+00666  140D  60                    RTS
+00667  140E             BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE HERE
+00668  140E  A9 01                 LDA #GAME_STATE_BALL_LAUNCH
+00669  1410  8D 16 18              STA GAME_STATE
+00670  1413  A9 02                 LDA #MAX_BALL_SPEED
+00671  1415  8D 25 18              STA BALL_SPEED
+00672  1418  A9 00                 LDA #0
+00673  141A  8D 26 18              STA BALL_HIT_COUNT
+00674  141D  20 6E 12              JSR DRAW
+00675  1420  AE 08 18              LDX REAL_BALL_Y
+00676  1423  BD C0 17              LDA YPOS_HI,X
+00677  1426  85 FC                 STA $FC
+00678  1428  BD D7 17              LDA YPOS_LOW,X
+00679  142B  85 FB                 STA $FB
+00680  142D  AC 07 18              LDY REAL_BALL_X
+00681  1430  A9 00                 LDA #BLACK
+00682  1432  91 FB                 STA ($FB),Y
+00683  1434  A9 20                 LDA #32
+00684  1436  91 FB                 STA ($FB),Y
+00685  1438  A9 87                 LDA #135
+00686  143A  8D 0C 90              STA BOUNCE_SOUND
+00687  143D  20 B3 13              JSR BALL_MISSED_DELAY
+00688  1440  AD 09 18              LDA BALL_CHAR
+00689  1443  91 FB                 STA ($FB),Y
+00690  1445  A9 8F                 LDA #143
+00691  1447  8D 0C 90              STA BOUNCE_SOUND
+00692  144A  20 B3 13              JSR BALL_MISSED_DELAY
+00693  144D  A9 20                 LDA #32
+00694  144F  91 FB                 STA ($FB),Y
+00695  1451  A9 87                 LDA #135
+00696  1453  8D 0C 90              STA BOUNCE_SOUND
+00697  1456  20 B3 13              JSR BALL_MISSED_DELAY
+00698  1459  AD 09 18              LDA BALL_CHAR
+00699  145C  91 FB                 STA ($FB),Y
+00700  145E  A9 00                 LDA #0
+00701  1460  8D 0C 90              STA BOUNCE_SOUND
+00702  1463  AE 23 18              LDX LIVES
+00703  1466  CA                    DEX
+00704  1467  8E 23 18              STX LIVES
+00705  146A  E0 00                 CPX #0
+00706  146C  D0 5B                 BNE EXIT_COLLISION
+00707  146E  A9 04                 LDA #GAME_STATE_GAME_OVER
+00708  1470  8D 16 18              STA GAME_STATE
+00709  1473             DID_BALL_HIT_A_BLOCK 
+00710  1473  AE 08 18              LDX REAL_BALL_Y
+00711  1476  BD C0 17              LDA YPOS_HI,X
+00712  1479  85 FC                 STA $FC
+00713  147B  BD D7 17              LDA YPOS_LOW,X
+00714  147E  85 FB                 STA $FB
+00715  1480  AC 07 18              LDY REAL_BALL_X
+00716  1483  B1 FB                 LDA ($FB),Y
+00717  1485  C9 20                 CMP #32
+00718  1487  F0 40                 BEQ EXIT_COLLISION  ; HIT EMPTY SPACE IGNORE THE REST
+00719  1489  C9 7E                 CMP #126
+00720  148B  F0 3C                 BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+00721  148D  C9 7C                 CMP #124
+00722  148F  F0 38                 BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+00723  1491  C9 7B                 CMP #123
+00724  1493  F0 34                 BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+00725  1495  C9 6C                 CMP #108
+00726  1497  F0 30                 BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
+00727  1499  48                    PHA                 ; STASH ACCUMULATOR IN STACK
+00728  149A  20 28 17              JSR BLOCK_HIT
+00729  149D  20 5B 12              JSR CHANGE_BALL_DIRECTION_Y
+00730  14A0  68                    PLA                     ; FETCH ACCUMULATOR FROM STACK.
+00731  14A1  C9 90                 CMP #$90                ; HIT THE "P" BLOCK?
+00732  14A3  D0 06                 BNE CHECK_CHECKED
+00733  14A5  20 4F 17              JSR ADD_SCORE_100
+00734  14A8  4C C9 14              JMP EXIT_COLLISION
+00735  14AB             CHECK_CHECKED 
+00736  14AB  C9 66                 CMP #102                ; HIT THE CHECKED BLOCKS
+00737  14AD  D0 06                 BNE CHECK_EXPLOSION
+00738  14AF  20 48 12              JSR CHANGE_BALL_DIRECTION_X
+00739  14B2  4C C9 14              JMP EXIT_COLLISION
+00740  14B5             CHECK_EXPLOSION 
+00741  14B5  C9 85                 CMP #$85                ; HIT THE EXPLOSION SPOT?
+00742  14B7  D0 06                 BNE CHECK_FIRE
+00743  14B9  20 CA 14              JSR EXPLOSION
+00744  14BC  4C C9 14              JMP EXIT_COLLISION
+00745  14BF             CHECK_FIRE 
+00746  14BF  C9 86                 CMP #$86 ; FIRE
+00747  14C1  D0 06                 BNE EXIT_COLLISION
+00748  14C3  20 90 15              JSR FIRE
+00749  14C6  4C C9 14              JMP EXIT_COLLISION
+00750  14C9             EXIT_COLLISION 
+00751  14C9  60                    RTS
+00752  14CA             
+00753  14CA             
+00754  14CA             EXPLOSION  ; TODO ADD ANIMATION AND NOISE
+00755  14CA  A9 00                 LDA #0
+00756  14CC  8D 27 18              STA EXPLOSION_GRID
+00757  14CF  AE 08 18              LDX REAL_BALL_Y
+00758  14D2  CA                    DEX
+00759  14D3             CHECK_EXPLOSION_ROW 
+00760  14D3  AC 07 18              LDY REAL_BALL_X
+00761  14D6  88                    DEY
+00762  14D7  BD C0 17              LDA YPOS_HI,X ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00763  14DA  85 FC                 STA $FC
+00764  14DC  BD D7 17              LDA YPOS_LOW,X
+00765  14DF  85 FB                 STA $FB
+00766  14E1             CHECK_EXPLOSION_SQUARE 
+00767  14E1  CC 0E 18              CPY OLD_BALL_X  ; SKIP OLD BALL LOCATION (WHERE BALL IS DISPLAYED)
+00768  14E4  D0 05                 BNE CHECK_EXPLOSION_BALL_POS
+00769  14E6  EC 0F 18              CPX OLD_BALL_Y
+00770  14E9  F0 1B                 BEQ NEXT_EXPLOSION_SPOT
+00771  14EB             CHECK_EXPLOSION_BALL_POS 
+00772  14EB  CC 07 18              CPY REAL_BALL_X      ; SKIP BALL LOCATION (WHERE BLOCK IS)
+00773  14EE  D0 05                 BNE HANDLE_EXPLOSION
+00774  14F0  EC 08 18              CPX REAL_BALL_Y
+00775  14F3  F0 11                 BEQ NEXT_EXPLOSION_SPOT
+00776  14F5             HANDLE_EXPLOSION 
+00777  14F5  B1 FB                 LDA ($FB),Y
+00778  14F7  C9 20                 CMP #32
+00779  14F9  F0 0B                 BEQ NEXT_EXPLOSION_SPOT
+00780  14FB  8A                    TXA                     ; SAVE X AND Y REGISTERS IN STACK
+00781  14FC  48                    PHA
+00782  14FD  98                    TYA
+00783  14FE  48                    PHA
+00784  14FF  20 28 17              JSR BLOCK_HIT
+00785  1502  68                    PLA                     ; GET X AND Y REGISTERS FROM STACK
+00786  1503  A8                    TAY
+00787  1504  68                    PLA
+00788  1505  AA                    TAX
+00789  1506             NEXT_EXPLOSION_SPOT 
+00790  1506  C8                    INY
+00791  1507  18                    CLC
+00792  1508  AD 27 18              LDA EXPLOSION_GRID
+00793  150B  69 01                 ADC #1
+00794  150D  8D 27 18              STA EXPLOSION_GRID
+00795  1510  C9 03                 CMP #3
+00796  1512  F0 0B                 BEQ NEW_EXPLOSION_ROW
+00797  1514  C9 06                 CMP #6
+00798  1516  F0 07                 BEQ NEW_EXPLOSION_ROW
+00799  1518  C9 09                 CMP #9
+00800  151A  F0 07                 BEQ DONE_EXPLOSION
+00801  151C  4C E1 14              JMP CHECK_EXPLOSION_SQUARE
+00802  151F             NEW_EXPLOSION_ROW 
+00803  151F  E8                    INX
+00804  1520  4C D3 14              JMP CHECK_EXPLOSION_ROW
+00805  1523             DONE_EXPLOSION 
+00806  1523  20 27 15              JSR ANIMATE_EXPLOSION
+00807  1526  60                    RTS
+00808  1527             
+00809  1527             
+00810  1527             ANIMATE_EXPLOSION 
+00811  1527  A2 00                 LDX #0
+00812  1529  8E 28 18              STX EXPLOSION_ANIMATION
+00813  152C  A9 80                 LDA #BOOM_SOUND
+00814  152E  8D 0D 90              STA NOISE_SOUND
+00815  1531             ANIMATE_EXPLOSION_CHARACTERS 
+00816  1531  A2 00                 LDX #0
+00817  1533  8E 27 18              STX EXPLOSION_GRID
+00818  1536  AE 28 18              LDX EXPLOSION_ANIMATION
+00819  1539  E0 03                 CPX #3
+00820  153B  F0 4D                 BEQ DONE_ANIMATION
+00821  153D  BD 29 18              LDA EXPLOSION_CHARS,X
+00822  1540  8D 2C 18              STA EXPLOSION_CHAR
+00823  1543  E8                    INX
+00824  1544  8E 28 18              STX EXPLOSION_ANIMATION
+00825  1547  AE 08 18              LDX REAL_BALL_Y
+00826  154A  CA                    DEX
+00827  154B             ANIMATE_EXPLOSION_ROW 
+00828  154B  AC 07 18              LDY REAL_BALL_X
+00829  154E  88                    DEY
+00830  154F  BD D7 17              LDA YPOS_LOW,X
+00831  1552  85 FB                 STA $FB
+00832  1554             ANIMATE_EXPLOSION_SQUARE 
+00833  1554  BD C0 17              LDA YPOS_HI,X ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00834  1557  85 FC                 STA $FC
+00835  1559  AD 2C 18              LDA EXPLOSION_CHAR
+00836  155C  91 FB                 STA ($FB),Y
+00837  155E  BD EE 17              LDA YCOL_HI,X
+00838  1561  85 FC                 STA $FC
+00839  1563  A5 02                 LDA RED
+00840  1565  91 FB                 STA ($FB),Y
+00841  1567  C8                    INY
+00842  1568  18                    CLC
+00843  1569  AD 27 18              LDA EXPLOSION_GRID
+00844  156C  69 01                 ADC #1
+00845  156E  8D 27 18              STA EXPLOSION_GRID
+00846  1571  C9 03                 CMP #3
+00847  1573  F0 11                 BEQ NEW_ANIMATE_EXPLOSION_ROW
+00848  1575  C9 06                 CMP #6
+00849  1577  F0 0D                 BEQ NEW_ANIMATE_EXPLOSION_ROW
+00850  1579  C9 09                 CMP #9
+00851  157B  D0 D7                 BNE ANIMATE_EXPLOSION_SQUARE
+00852  157D  20 97 03              JSR WAITFORBLANK
+00853  1580  20 A0 03              JSR WAITFORNOTBLANK
+00854  1583  4C 31 15              JMP ANIMATE_EXPLOSION_CHARACTERS
+00855  1586             NEW_ANIMATE_EXPLOSION_ROW 
+00856  1586  E8                    INX
+00857  1587  4C 4B 15              JMP ANIMATE_EXPLOSION_ROW
+00858  158A             DONE_ANIMATION 
+00859  158A  A9 00                 LDA #0
+00860  158C  8D 0D 90              STA NOISE_SOUND
+00861  158F  60                    RTS
+00862  1590             
+00863  1590             
+00864  1590             FIRE
+00865  1590  A9 03                 LDA #GAME_STATE_FIRE
+00866  1592  8D 16 18              STA GAME_STATE
+00867  1595  A9 00                 LDA #0          ; SHUT OFF BOUNCE SOUND FROM HITTING "F" BLOCK
+00868  1597  8D 0C 90              STA BOUNCE_SOUND
+00869  159A             FIRE_ERASE_BALL 
+00870  159A  AE 08 18              LDX REAL_BALL_Y ; ERASE BALL AND OLD SPACE
+00871  159D  BD C0 17              LDA YPOS_HI,X  ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00872  15A0  85 FC                 STA $FC
+00873  15A2  BD D7 17              LDA YPOS_LOW,X
+00874  15A5  85 FB                 STA $FB
+00875  15A7  AC 07 18              LDY REAL_BALL_X
+00876  15AA  A9 20                 LDA #32
+00877  15AC  91 FB                 STA ($FB),Y
+00878  15AE  AE 0F 18              LDX OLD_BALL_Y ; OLD BALL LOCATION
+00879  15B1  BD C0 17              LDA YPOS_HI,X
+00880  15B4  85 FC                 STA $FC
+00881  15B6  BD D7 17              LDA YPOS_LOW,X
+00882  15B9  85 FB                 STA $FB
+00883  15BB  AC 0E 18              LDY OLD_BALL_X
+00884  15BE  A9 20                 LDA #32
+00885  15C0  91 FB                 STA ($FB),Y
+00886  15C2             FIRE_ERASE_PADDLE ; ERASE THE PADDLE SO CAN REPLACE WITH ^
+00887  15C2  A2 16                 LDX #PADDLE_Y
+00888  15C4  BD C0 17              LDA YPOS_HI,X  ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+00889  15C7  85 FC                 STA $FC
+00890  15C9  BD D7 17              LDA YPOS_LOW,X
+00891  15CC  85 FB                 STA $FB
+00892  15CE  A9 20                 LDA #32        ; LOAD THE SPACE CHARACTER IN THE ACCUMULATOR
+00893  15D0  AC 11 18              LDY PADDLE_X
+00894  15D3  91 FB                 STA ($FB),Y
+00895  15D5  C8                    INY
+00896  15D6  91 FB                 STA ($FB),Y
+00897  15D8  C8                    INY
+00898  15D9  91 FB                 STA ($FB),Y
+00899  15DB  AC 12 18              LDY OLD_PADDLE_X
+00900  15DE  91 FB                 STA ($FB),Y
+00901  15E0  C8                    INY
+00902  15E1  91 FB                 STA ($FB),Y
+00903  15E3  C8                    INY
+00904  15E4  91 FB                 STA ($FB),Y
+00905  15E6             INIT_FIRE  ; SET NEW PADDLE POSITION SINCE ONLY 1 CHAR
+00906  15E6  AC 11 18              LDY PADDLE_X
+00907  15E9  C8                    INY
+00908  15EA  8C 11 18              STY PADDLE_X
+00909  15ED  8C 12 18              STY OLD_PADDLE_X
+00910  15F0             FIRE_MAIN_LOOP 
+00911  15F0  20 F6 16              JSR DRAW_FIRE_PADDLE
+00912  15F3  20 2B 16              JSR FIRE_CHECK_FOR_CONTROLS
+00913  15F6  AD 16 18              LDA GAME_STATE
+00914  15F9  C9 03                 CMP #GAME_STATE_FIRE
+00915  15FB  F0 F3                 BEQ FIRE_MAIN_LOOP
+00916  15FD             EXIT_FIRE
+00917  15FD  A2 16                 LDX #PADDLE_Y   ; ERASE FIRE PADDLE
+00918  15FF  BD C0 17              LDA YPOS_HI,X
+00919  1602  85 FC                 STA $FC
+00920  1604  BD D7 17              LDA YPOS_LOW,X
+00921  1607  85 FB                 STA $FB
+00922  1609  A9 20                 LDA #32
+00923  160B  AC 12 18              LDY OLD_PADDLE_X
+00924  160E  91 FB                 STA ($FB),Y
+00925  1610                        
+00926  1610  AE 11 18              LDX PADDLE_X      ; SEE IF WE NEED TO ADJUST PADDLE_X
+00927  1613  E0 00                 CPX #0
+00928  1615  F0 10                 BEQ FIRE_DONE
+00929  1617             FIRE_ADJUST_PADDLE 
+00930  1617  CA                    DEX               ; OTHERWISE NEED TO BUMP AT LEAST ONE SO PADDLE GROWS TO 3 SPACES FROM THIS MIDDLE
+00931  1618  8E 11 18              STX PADDLE_X
+00932  161B  38                    SEC
+00933  161C  AD 11 18              LDA PADDLE_X      ; NEED TO CHECK THAT PADDLE ISN'T STILL TOO CLOSE TO RIGHT EDGE
+00934  161F  E9 14                 SBC #20
+00935  1621  30 04                 BMI FIRE_DONE
+00936  1623  CA                    DEX               ; PADDLE IS TOO CLOSE TO EDGE SO PUSH IT AGAIN.
+00937  1624  8E 11 18              STX PADDLE_X
+00938  1627             FIRE_DONE
+00939  1627  8E 12 18              STX OLD_PADDLE_X
+00940  162A  60                    RTS
+00941  162B             
+00942  162B             FIRE_CHECK_FOR_CONTROLS 
+00943  162B  20 E4 FF              JSR $FFE4       ;SCAN KEYBOARD AND PUT KEYCODE IN ACCUMULATOR
+00944  162E  C9 1D                 CMP #RIGHT_KC   ;CHECK FOR RIGHT KEYCODE
+00945  1630  D0 0C                 BNE FIRE_CHECK_DOWN
+00946  1632  AE 11 18              LDX PADDLE_X    ; MOVE PADDLE RIGHT
+00947  1635  E8                    INX             ; INCREASE POSITION BY 1
+00948  1636  E0 16                 CPX #22
+00949  1638  F0 1F                 BEQ FIRE_FINISHED_CHECK_FOR_CONTROLS ; IF PADDLE IS AT RIGHT EDGE LEAVE
+00950  163A  8E 11 18              STX PADDLE_X    ; STASH
+00951  163D  60                    RTS
+00952  163E             FIRE_CHECK_DOWN 
+00953  163E  C9 11                 CMP #DOWN_KC
+00954  1640  D0 0A                 BNE FIRE_CHECK_SPACE ; IF HERE AND NOT DOWN KEYCODE LEAVE
+00955  1642  AE 11 18              LDX PADDLE_X
+00956  1645  CA                    DEX               ; DECREASE PADDLE
+00957  1646  30 11                 BMI FIRE_FINISHED_CHECK_FOR_CONTROLS ; IF PAST LEFT EDGE DON'T SAVE
+00958  1648  8E 11 18              STX PADDLE_X
+00959  164B  60                    RTS
+00960  164C             FIRE_CHECK_SPACE 
+00961  164C  C9 20                 CMP #SPACE_KC
+00962  164E  D0 09                 BNE FIRE_FINISHED_CHECK_FOR_CONTROLS ; TODO NEXT CONTROL?
+00963  1650  20 5A 16              JSR SHOOT
+00964  1653  A5 02                 LDA GAME_STATE_BALL_FREE
+00965  1655  8D 16 18              STA GAME_STATE
+00966  1658  60                    RTS
+00967  1659             FIRE_FINISHED_CHECK_FOR_CONTROLS 
+00968  1659  60                    RTS
+00969  165A             
+00970  165A             
+00971  165A             SHOOT
+00972  165A  A2 16                 LDX #PADDLE_Y
+00973  165C             SHOOT_LOOP_CHECK 
+00974  165C  CA                    DEX
+00975  165D  E0 00                 CPX #0
+00976  165F  F0 21                 BEQ SHOOT_LOOP_CHECK_DONE
+00977  1661  BD C0 17              LDA YPOS_HI,X
+00978  1664  85 FC                 STA $FC
+00979  1666  BD D7 17              LDA YPOS_LOW,X
+00980  1669  85 FB                 STA $FB
+00981  166B  AC 11 18              LDY PADDLE_X
+00982  166E  B1 FB                 LDA ($FB),Y
+00983  1670  C9 20                 CMP #32
+00984  1672  F0 E8                 BEQ SHOOT_LOOP_CHECK
+00985  1674  8A                    TXA                     ; SAVE X AND Y REGISTERS IN STACK
+00986  1675  48                    PHA
+00987  1676  98                    TYA
+00988  1677  48                    PHA
+00989  1678  20 28 17              JSR BLOCK_HIT
+00990  167B  68                    PLA                     ; GET X AND Y REGISTERS FROM STACK
+00991  167C  A8                    TAY
+00992  167D  68                    PLA
+00993  167E  AA                    TAX
+00994  167F  4C 5C 16              JMP SHOOT_LOOP_CHECK
+00995  1682             SHOOT_LOOP_CHECK_DONE 
+00996  1682  A9 E9                 LDA #LASER_SOUND_START
+00997  1684  8D 18 18              STA SOUND_NOTE
+00998  1687  A2 16                 LDX #PADDLE_Y
+00999  1689             SHOOT_LASER_BEAM 
+01000  1689  CA                    DEX
+01001  168A  E0 00                 CPX #0
+01002  168C  F0 32                 BEQ SHOOT_LASER_BEAM_DONE
+01003  168E  BD C0 17              LDA YPOS_HI,X
+01004  1691  85 FC                 STA $FC
+01005  1693  BD D7 17              LDA YPOS_LOW,X
+01006  1696  85 FB                 STA $FB
+01007  1698  AC 11 18              LDY PADDLE_X
+01008  169B  A9 5D                 LDA #93         ; DRAW THE LASER CHARACTER (HORIZONTAL LINE)
+01009  169D  91 FB                 STA $(FB),Y
+01010  169F  BD EE 17              LDA YCOL_HI,X
+01011  16A2  85 FC                 STA $FC
+01012  16A4  A9 02                 LDA #RED
+01013  16A6  91 FB                 STA $(FB),Y
+01014  16A8  8A                    TXA
+01015  16A9  AE 18 18              LDX SOUND_NOTE
+01016  16AC  8E 0C 90              STX BOUNCE_SOUND
+01017  16AF  E8                    INX
+01018  16B0  8E 18 18              STX SOUND_NOTE
+01019  16B3  AA                    TAX
+01020  16B4  6A                    ROR
+01021  16B5  90 D2                 BCC SHOOT_LASER_BEAM ; ONLY WAIT FOR BLANK HALF THE TIME
+01022  16B7  20 97 03              JSR WAITFORBLANK
+01023  16BA  20 A0 03              JSR WAITFORNOTBLANK
+01024  16BD  4C 89 16              JMP SHOOT_LASER_BEAM
+01025  16C0             SHOOT_LASER_BEAM_DONE 
+01026  16C0  A2 16                 LDX #PADDLE_Y
+01027  16C2             SHOOT_LASER_BEAM_ERASE 
+01028  16C2  CA                    DEX
+01029  16C3  E0 00                 CPX #0
+01030  16C5  F0 29                 BEQ SHOOT_DONE
+01031  16C7  BD C0 17              LDA YPOS_HI,X
+01032  16CA  85 FC                 STA $FC
+01033  16CC  BD D7 17              LDA YPOS_LOW,X
+01034  16CF  85 FB                 STA $FB
+01035  16D1  AC 11 18              LDY PADDLE_X
+01036  16D4  A9 20                 LDA #32
+01037  16D6  91 FB                 STA $(FB),Y
+01038  16D8  8A                    TXA
+01039  16D9  AE 18 18              LDX SOUND_NOTE
+01040  16DC  8E 0C 90              STX BOUNCE_SOUND
+01041  16DF  CA                    DEX
+01042  16E0  8E 18 18              STX SOUND_NOTE
+01043  16E3  AA                    TAX
+01044  16E4  6A                    ROR
+01045  16E5  90 DB                 BCC SHOOT_LASER_BEAM_ERASE ; ONLY WAIT FOR BLANK HALF THE TIME
+01046  16E7  20 97 03              JSR WAITFORBLANK
+01047  16EA  20 A0 03              JSR WAITFORNOTBLANK
+01048  16ED  4C C2 16              JMP SHOOT_LASER_BEAM_ERASE
+01049  16F0             SHOOT_DONE 
+01050  16F0  A9 00                 LDA #0
+01051  16F2  8D 18 18              STA SOUND_NOTE
+01052  16F5  60                    RTS
+01053  16F6             
+01054  16F6             DRAW_FIRE_PADDLE 
+01055  16F6  20 97 03              JSR WAITFORBLANK
+01056  16F9  A2 16                 LDX #PADDLE_Y
+01057  16FB  BD C0 17              LDA YPOS_HI,X  ; SET ZERO PAGE TO ROW BASED ON LOOKUP ARRAY
+01058  16FE  85 FC                 STA $FC
+01059  1700  BD D7 17              LDA YPOS_LOW,X
+01060  1703  85 FB                 STA $FB
+01061  1705  AC 12 18              LDY OLD_PADDLE_X
+01062  1708  CC 11 18              CPY PADDLE_X
+01063  170B  F0 04                 BEQ DRAW_FIRE_CHAR
+01064  170D  A9 20                 LDA #32
+01065  170F  91 FB                 STA ($FB),Y
+01066  1711             DRAW_FIRE_CHAR 
+01067  1711  AC 11 18              LDY PADDLE_X
+01068  1714  A9 1E                 LDA #FIRE_CHARACTER ; LOAD THE SPACE CHARACTER IN THE ACCUMULATOR
+01069  1716  91 FB                 STA ($FB),Y
+01070  1718  BD EE 17              LDA YCOL_HI,X
+01071  171B  85 FC                 STA $FC
+01072  171D  A9 06                 LDA #BLUE
+01073  171F  91 FB                 STA ($FB),Y
+01074  1721  8C 12 18              STY OLD_PADDLE_X
+01075  1724  20 A0 03              JSR WAITFORNOTBLANK
+01076  1727  60                    RTS
+01077  1728             
+01078  1728             
+01079  1728             BLOCK_HIT
+01080  1728  20 33 17              JSR ADD_SCORE_10
+01081  172B  AE 1A 18              LDX LEVEL_BLOCKS
+01082  172E  CA                    DEX
+01083  172F  8E 1A 18              STX LEVEL_BLOCKS ;SINCE WE'RE IGNORING THE BLOCK THAT ACTIVATED THIS, WE SHOULDN'T HAVE TO WORRY ABOUT CHECKING IF WE HAVE FINISHED THE LEVEL
+01084  1732  60                    RTS
+01085  1733             
+01086  1733             
+01087  1733             ADD_SCORE_10 
+01088  1733  F8                    SED             ; SWITCH TO BINARY CODED DECIMAL
+01089  1734  18                    CLC             ; CLEAR CARRY
+01090  1735  AD 13 18              LDA SCORE       ; GET CURRENT SCORE
+01091  1738  69 0A                 ADC #10         ; ADD 10
+01092  173A  8D 13 18              STA SCORE       ; STASH SCORE
+01093  173D  AD 14 18              LDA SCORE+1     ; GET 2ND BYTE
+01094  1740  69 00                 ADC #0          ; ADD WITH CARRY IN CASE THERE'S A CARRY BIT
+01095  1742  8D 14 18              STA SCORE+1     ; STASH 2ND SCORE BIT
+01096  1745  AD 15 18              LDA SCORE+2     ; GET HIGHEST BYTE
+01097  1748  69 00                 ADC #0          ; ADD WITH CARRY IN CASE THERE'S A CARRY BIT
+01098  174A  8D 15 18              STA SCORE+2     ; STASH HIGHEST BYTE
+01099  174D  D8                    CLD             ; CLEAR BINARY CODED DECIMAL
+01100  174E  60                    RTS
+01101  174F             
+01102  174F             
+01103  174F             ADD_SCORE_100 
+01104  174F  F8                    SED             ; SWITCH TO BINARY CODED DECIMAL
+01105  1750  18                    CLC             ; CLEAR CARRY BIT
+01106  1751  AD 14 18              LDA SCORE+1     ; 2ND SCORE BYTE IS FOR THE 1000 AND 100 VALUES
+01107  1754  69 01                 ADC #01         ; ADD 1 TO THE 2ND BYTE = 100
+01108  1756  8D 14 18              STA SCORE+1     ; STASH 2ND BYTE
+01109  1759  AD 15 18              LDA SCORE+2     ; GET HIGHTEST BYTE
+01110  175C  69 00                 ADC #0          ; ADD WITH CARRY IN CASE THERE'S A CARRY BIT
+01111  175E  8D 15 18              STA SCORE+2     ; STASH HIGHEST BYTE
+01112  1761  D8                    CLD             ; CLEAR BINARY CODED DECIMAL
+01113  1762  60                    RTS
+01114  1763             
+01115  1763             MONITOR_START_KEY 
+01116  1763  20 E4 FF              JSR $FFE4
+01117  1766  C9 0D                 CMP #RETURN_KC
+01118  1768  F0 12                 BEQ EXIT_MONITOR
+01119  176A  48                    PHA
+01120  176B  38                    SEC
+01121  176C  E9 30                 SBC #$30
+01122  176E  30 0A                 BMI RESTORE_LDA_MONITOR ;BUTTON PRESSED UNDER 0
+01123  1770  E9 09                 SBC #9
+01124  1772  10 06                 BPL RESTORE_LDA_MONITOR ;BUTTON PRESSED HIGHER THEN 8
+01125  1774  18                    CLC
+01126  1775  69 08                 ADC #8
+01127  1777  8D 19 18              STA LEVEL
+01128  177A             RESTORE_LDA_MONITOR 
+01129  177A  18                    CLC
+01130  177B  68                    PLA
+01131  177C             EXIT_MONITOR 
+01132  177C  60                    RTS
+01133  177D             
+01134  177D             
+01135  177D             GAME_OVER
+01136  177D  20 6E 12              JSR DRAW
+01137  1780  A9 1D                 LDA #>GAME_OVER_TEXT
+01138  1782  85 FC                 STA $FC
+01139  1784  A9 47                 LDA #<GAME_OVER_TEXT
+01140  1786  85 FB                 STA $FB
+01141  1788  20 84 03              JSR PRINT_TEXT
+01142  178B  A9 1D                 LDA #>PRESS_RETURN_TEXT ; HI BYTE
+01143  178D  85 FC                 STA $FC
+01144  178F  A9 61                 LDA #<PRESS_RETURN_TEXT ;LOW BYTE
+01145  1791  85 FB                 STA $FB
+01146  1793  20 84 03              JSR PRINT_TEXT
+01147  1796  A9 00                 LDA #0
+01148  1798  8D 19 18              STA LEVEL
+01149  179B  A2 00                 LDX #0
+01150  179D  A0 00                 LDY #0
+01151  179F             GAME_OVER_POLL 
+01152  179F  BD 2D 18              LDA COLOUR_CYCLE,X
+01153  17A2             GAME_OVER_NEXT_CHARACTER 
+01154  17A2  99 E1 96              STA GAME_OVER_COL_POS,Y
+01155  17A5  C8                    INY
+01156  17A6  C0 09                 CPY #9
+01157  17A8  D0 F8                 BNE GAME_OVER_NEXT_CHARACTER
+01158  17AA  A0 00                 LDY #0
+01159  17AC  E8                    INX
+01160  17AD  E0 08                 CPX #8
+01161  17AF  D0 02                 BNE GAME_OVER_MONITOR_KEY
+01162  17B1  A2 00                 LDX #0
+01163  17B3             GAME_OVER_MONITOR_KEY 
+01164  17B3  20 63 17              JSR MONITOR_START_KEY
+01165  17B6  C9 0D                 CMP #RETURN_KC
+01166  17B8  D0 E5                 BNE GAME_OVER_POLL
+01167  17BA  20 0F 10              JSR INIT_GAME
+01168  17BD  4C 0E 11              JMP MAIN_LOOP
+01169  17C0             
+01170  17C0             ; ADDRESS FOR EACH SCREEN ROW (COLOUR AND POSITIONAL ADDRESS SHARE SAME LOW BYTE)
+01171  17C0  1E 1E 1E   YPOS_HI    BYTE $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F
+01172  17D7  00 16 2C   YPOS_LOW   BYTE $00, $16, $2C, $42, $58, $6E, $84, $9A, $B0, $C6, $DC, $F2, $08, $1E, $34, $4A, $60, $76, $8C, $A2, $B8, $CE, $E4
+01173  17EE  96 96 96   YCOL_HI    BYTE $96, $96, $96, $96, $96, $96, $96, $96, $96, $96, $96, $96, $97, $97, $97, $97, $97, $97, $97, $97, $97, $97, $97
+01174  1805             
+01175  1805             ; BALL X AND Y (VIRTUAL)
+01176  1805  14         BALL_X     BYTE 20
+01177  1806  2B         BALL_Y     BYTE 43
+01178  1807             ; BALL X AND Y ON SCREEN
+01179  1807  0A         REAL_BALL_X BYTE 10
+01180  1808  15         REAL_BALL_Y BYTE 21
+01181  1809             ; BALL CHARACTER TO DISPLAY
+01182  1809  7B         BALL_CHAR  BYTE 123
+01183  180A             ; ARRAY OF POSSIBLE BALL CHARACTORS
+01184  180A  7E 7C 7B   BALL_CHARS BYTE 126, 124, 123, 108; UPPER LEFT, UPPER RIGHT, LOWER LEFT, LOWER RIGHT
+01185  180E             ; PREVIOUS BALL X AND Y ON SCREEN
+01186  180E  0A         OLD_BALL_X BYTE 10
+01187  180F  15         OLD_BALL_Y BYTE 21
+01188  1810             ; BALL DIRECTION BIT 1 X, BIT 2 Y ?0-RIGHT ?1-LEFT, 0? UP, 1?-DOWN
+01189  1810  07         BALL_DIRECTION BITS %11
+01190  1811             ; PADDLE X POSITION (LEFT MOST)
+01191  1811  09         PADDLE_X   BYTE 9
+01192  1812             ; PREVIOUS PADDLE X POSITION
+01193  1812  09         OLD_PADDLE_X BYTE 9
+01194  1813             ; SCORE
+01195  1813  00 00 00   SCORE      BYTE 0,0,0
+01196  1816             ; GAME STATE
+01197  1816  01         GAME_STATE BYTE GAME_STATE_BALL_LAUNCH
+01198  1817             ; SOUND
+01199  1817  00         SOUND_LENGTH BYTE 0
+01200  1818  00         SOUND_NOTE BYTE 0
+01201  1819             ; LEVEL
+01202  1819  00         LEVEL      BYTE 0
+01203  181A  00         LEVEL_BLOCKS BYTE 0
+01204  181B  3C 58 30   LEVELS_BLOCKS BYTE LEVEL_1_BLOCKS,LEVEL_2_BLOCKS,LEVEL_3_BLOCKS,LEVEL_4_BLOCKS,LEVEL_5_BLOCKS,LEVEL_6_BLOCKS,LEVEL_7_BLOCKS,LEVEL_8_BLOCKS
+01205  1823             ; LIVES
+01206  1823  00         LIVES      BYTE 0
+01207  1824             ; LOOP COUNT
+01208  1824  00         LOOP       BYTE 0
+01209  1825             ; LOOP
+01210  1825  02         BALL_SPEED BYTE MAX_BALL_SPEED
+01211  1826  00         BALL_HIT_COUNT BYTE 0
+01212  1827             
+01213  1827             ; EXPLOSION GRID
+01214  1827  00         EXPLOSION_GRID BYTE 0
+01215  1828  00         EXPLOSION_ANIMATION BYTE 0
+01216  1829  2B 2A 20   EXPLOSION_CHARS BYTE 43,42,32
+01217  182C  2B         EXPLOSION_CHAR BYTE 43
+01218  182D             
+01219  182D  00 02 03   COLOUR_CYCLE BYTE BLACK,RED,CYAN,PURPLE,GREEN,BLUE,YELLOW,WHITE
+01220  1835             ; TEXT
+01221  1835  13 90 92   SCORE_TEXT TEXT "{HOME}{BLACK}{REVERSE OFF}SC:"
+01222  183B  00                    BYTE 0
+01223  183C             
+01224  183C             
+01225  183C             ;SCREEN 1 - LEVEL 1 (60 BLOCKS)
+01226  183C             LEVEL_1_BLOCKS=60 
+01227  183C  13 11 1D   LEVEL_1    TEXT "{HOME}{DOWN}{RIGHT}{REVERSE ON}{CYAN} {BLUE} {PURPLE} {RED} {PURPLE} {BLUE} {CYAN} {GREEN}  {YELLOW}  {GREEN}  {CYAN} {BLUE} {PURPLE} {RED} {PURPLE} {BLUE} {CYAN} {REVERSE OFF}{RETURN}"
+01228  1867  1D 12 20              TEXT "{RIGHT}{REVERSE ON} {BLUE} {PURPLE} {RED}E{PURPLE} {BLUE} {CYAN} {GREEN} {YELLOW}    {GREEN} {CYAN} {BLUE} {PURPLE} {RED}E{PURPLE} {BLUE} {CYAN} {REVERSE OFF}{RETURN}"
+01229  188F  1D 12 20              TEXT "{RIGHT}{REVERSE ON} {BLUE} {PURPLE} {RED} {PURPLE} {BLUE} {CYAN} {GREEN}  {YELLOW}  {GREEN}  {CYAN} {BLUE} {PURPLE} {RED} {PURPLE} {BLUE} {CYAN} {REVERSE OFF}{RETURN}"
+01230  18B7  00                    BYTE 0
+01231  18B8             ;SCREEN 2 - LEVEL 2 (88 BLOCKS)
+01232  18B8             LEVEL_2_BLOCKS=88 
+01233  18B8  13 11 12   LEVEL_2    TEXT "{HOME}{DOWN}{REVERSE ON}{BLACK}                      {REVERSE OFF}"
+01234  18D3  12 1F 20              TEXT "{REVERSE ON}{BLUE}    F    FF     F     {REVERSE OFF}"
+01235  18EC  12 9C 20              TEXT "{REVERSE ON}{PURPLE}   E             E    {REVERSE OFF}"
+01236  1905  90 A6 A6              TEXT "{BLACK}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}"
+01237  191C  00                    BYTE 0
+01238  191D             ;SCREEN 3 - LEVEL 3 (48BLOCKS)
+01239  191D             LEVEL_3_BLOCKS=48 
+01240  191D  13 11 20   LEVEL_3    TEXT "{HOME}{DOWN}         {REVERSE ON}{RED}{169}{127}{REVERSE OFF}{RETURN}"
+01241  192E  20 20 20              TEXT "        {REVERSE ON}{169}{160}{160}{127}{REVERSE OFF}{RETURN}"
+01242  193D  20 20 20              TEXT "       {REVERSE ON}{169}{160}EE{160}{127}{REVERSE OFF}{RETURN}"
+01243  194D  20 20 20              TEXT "      {REVERSE ON}{169}{160}{160}{172}{187}{160}{160}{127}{REVERSE OFF} {REVERSE ON}{169}{127}{REVERSE OFF}{RETURN}"
+01244  1963  20 20 20              TEXT "     {REVERSE ON}{169}{160}{160}P{REVERSE OFF}{161}{REVERSE ON}{161}P{160}{160}{127}{REVERSE OFF}{127}{REVERSE ON} {127}{127}{REVERSE OFF}{RETURN}"
+01245  197D  20 20 20              TEXT "    {REVERSE ON}{169}{160}{160}EP{REVERSE OFF}{161}{REVERSE ON}{161}PE{160}{160}{127}{REVERSE OFF}"
+01246  1991  00                    BYTE 0
+01247  1992             ;SCREEN 4 - LEVEL 4 (88 BLOCKS)
+01248  1992             LEVEL_4_BLOCKS=88 
+01249  1992  13 11 12   LEVEL_4    TEXT "{HOME}{DOWN}{REVERSE ON}{BLACK}   {185}{185}            .  P {REVERSE OFF}"
+01250  19AD  12 20 20              TEXT "{REVERSE ON}  {REVERSE OFF}{191}{REVERSE ON}HQ{191}{171}Q{179}  {125} {125}        {REVERSE OFF}"
+01251  19C7  12 20 20              TEXT "{REVERSE ON}  {191}EC{REVERSE OFF}{191}{REVERSE ON}  .  {171}Q{179}   F  . {REVERSE OFF}"
+01252  19E1  12 20 20              TEXT "{REVERSE ON}   {184}{184}      {125} {125}        {REVERSE OFF}"
+01253  19F9  00                    BYTE 0
+01254  19FA             ;SCREEN 5 - LEVEL 5 (77 BLOCKS)
+01255  19FA             LEVEL_5_BLOCKS=71 
+01256  19FA  13 11 12   LEVEL_5    TEXT "{HOME}{DOWN}{REVERSE ON}{YELLOW}{160}{160}{REVERSE OFF}{181}C       {RED}{185}{REVERSE ON}{184}{183}{184}{REVERSE OFF}{RETURN}"
+01257  1A12  12 9E 20              TEXT "{REVERSE ON}{YELLOW} {172}{REVERSE OFF}    {185}     {REVERSE ON}{172}  {REVERSE OFF}{RETURN}"
+01258  1A27  B8 20 CD              TEXT "{184} M  {170}{REVERSE ON}P{REVERSE OFF}{181}   {188}{REVERSE ON}   {REVERSE OFF}   {172}{REVERSE ON}{184}{184}{REVERSE OFF}{187}"
+01259  1A43  C8 20 20              TEXT "H     {184}      {REVERSE ON}{RED}  {REVERSE OFF}   {REVERSE ON}{YELLOW}{181}FE{182}{REVERSE OFF}"
+01260  1A5F  20 20 20              TEXT "            {REVERSE ON}{RED}{190}{172} {188}{REVERSE OFF}  {REVERSE ON}{YELLOW}{181}EE{182}{REVERSE OFF}"
+01261  1A7B  20 20 20              TEXT "   {REVERSE ON}{GREEN}{184}{184}{REVERSE OFF} {REVERSE ON}{184}{REVERSE OFF}    {REVERSE ON}{YELLOW}{187}{RED}{172}{BLUE}{190}{184}{RED}{187}{REVERSE OFF}{YELLOW}{187} {188}{REVERSE ON}{185}{185}{REVERSE OFF}{190}"
+01262  1A9F  20 20 12              TEXT "  {REVERSE ON}{GREEN}{190}  {188}{172}{REVERSE OFF}     {REVERSE ON}{BLUE}{190}{172} {REVERSE OFF}{RETURN}"
+01263  1AB5  20 20 12              TEXT "  {REVERSE ON}{GREEN}{190}{REVERSE OFF}  {REVERSE ON}{190}{REVERSE OFF}      {REVERSE ON}{BLUE} {REVERSE OFF} {REVERSE ON} {REVERSE OFF}{RETURN}"
+01264  1ACF  20 20 92              TEXT "  {REVERSE OFF}{GREEN}{166}{166}{166}{166}{REVERSE OFF}      {REVERSE ON}{BLACK}{162}{REVERSE OFF} {REVERSE ON}{162}{REVERSE OFF}{RETURN}"
+01265  1AE7  20 20 20              TEXT "            {REVERSE OFF}{GREEN}{166}{166}{166}{REVERSE OFF}"
+01266  1AF9  00                    BYTE 0
+01267  1AFA             ;SCREEN 6 - LEVEL 6 (52 BLOCKS)
+01268  1AFA             LEVEL_6_BLOCKS=52 
+01269  1AFA  13 11 20   LEVEL_6    TEXT "{HOME}{DOWN}    {REVERSE ON}{PURPLE}P            P{REVERSE OFF}{RETURN}"
+01270  1B12  20 20 20              TEXT "     {REVERSE ON}            {REVERSE OFF}{RETURN}"
+01271  1B26  20 20 20              TEXT "       {REVERSE ON}E  FF  E{REVERSE OFF}{RETURN}"
+01272  1B38  20 20 20              TEXT "         {REVERSE ON}    {REVERSE OFF}   {CYAN}{166}{RETURN}"
+01273  1B4D  20 20 20              TEXT "   {REVERSE ON}F{REVERSE OFF}  {166}      {166}{RETURN}"
+01274  1B5E  20 20 20              TEXT "   {166}             {166}{RETURN}"
+01275  1B71  20 20 20              TEXT "        {166}{RETURN}"
+01276  1B7B  20 A6 20              TEXT " {166}           {166}{RETURN}"
+01277  1B8A  20 20 20              TEXT "    {166}    {166}   {REVERSE ON}E{REVERSE OFF}{RETURN}"
+01278  1B9B  20 20 20              TEXT "                   {166}{RETURN}"
+01279  1BB0  20 20 20              TEXT "   {166}{RETURN}"
+01280  1BB5  00                    BYTE 0
+01281  1BB6             ;SCREEN 7 - LEVEL 7 (62 BLOCKS)
+01282  1BB6             LEVEL_7_BLOCKS=60 
+01283  1BB6  13 11 20   LEVEL_7    TEXT "{HOME}{DOWN}   {YELLOW}{165}{RETURN}"
+01284  1BBE  20 BF 20              TEXT " {191}  {REVERSE ON}{191}{REVERSE OFF}  {REVERSE ON}{BLACK}{162}{162}{162}{162}{187}{172}{162}{162}{162}{162}{REVERSE OFF}{RETURN}"
+01285  1BD5  9E A4 20              TEXT "{YELLOW}{164} {REVERSE ON}{RED}{190}{188}{REVERSE OFF} {YELLOW}{164}     {REVERSE ON}{BLACK}{184}{184}{REVERSE OFF}{RETURN}"
+01286  1BEB  20 20 12              TEXT "  {REVERSE ON}{RED}{187}{172}{REVERSE OFF}{BLACK}{164}{164}{185}{185}{162}{162}{REVERSE ON}{190}{REVERSE OFF}{190}{188}{REVERSE ON}{188}{REVERSE OFF}{162}{162}{185}{185}{164}{164}{RETURN}"
+01287  1C08  20 12 9E              TEXT " {REVERSE ON}{YELLOW}{191}{REVERSE OFF}  {191}{REVERSE ON}{BLACK}E{REVERSE OFF}{183}{REVERSE ON}F{REVERSE OFF}{184}{184}{REVERSE ON}{187}{REVERSE OFF}{PURPLE}{188}{190}{REVERSE ON}{BLACK}{172}{REVERSE OFF}{184}{184}{REVERSE ON}F{REVERSE OFF}{183}{REVERSE ON}E{REVERSE OFF}{RETURN}"
+01288  1C2E  20 20 9E              TEXT "  {YELLOW}{167}       {REVERSE ON}{BLACK}{161}{188}{190}{REVERSE OFF}{161}{RETURN}"
+01289  1C41  20 20 20              TEXT "           {REVERSE ON}{187}{172}{REVERSE OFF}{RETURN}"
+01290  1C51  20 20 20              TEXT "           {167}{165}{RETURN}"
+01291  1C5F  20 20 20              TEXT "           {167}{165}{RETURN}"
+01292  1C6D  00                    BYTE 0
+01293  1C6E             ;SCREEN 8 - LEVEL 8 77 BLOCKS
+01294  1C6E             LEVEL_8_BLOCKS=71 
+01295  1C6E  13 11 20   LEVEL_8    TEXT "{HOME}{DOWN} {PURPLE}UI    {162}{187}{REVERSE ON}{184}{184}{REVERSE OFF}{172}{162}     CQC{RETURN}"
+01296  1C89  C5 C5 C5              TEXT "EEEE  {REVERSE ON}{190}{172}{190}EE{188}{187}{188}{REVERSE OFF}{RETURN}"
+01297  1C9A  20 20 20              TEXT "      {188}{REVERSE ON}{188}{162}{162}{162}{162}{190}{REVERSE OFF}{190}{RETURN}"
+01298  1CAB  9E A6 A6              TEXT "{YELLOW}{166}{166}{166}{166}{166}  {PURPLE}{188}{REVERSE ON}{162}{185}{185}{162}{REVERSE OFF}{190}   {YELLOW}{166}{166}{166}{166}{166}{166}"
+01299  1CC6  20 20 20              TEXT "    {REVERSE ON}{CYAN}F{REVERSE OFF}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{REVERSE ON}F{REVERSE OFF}{RETURN}"
+01300  1CDD  1F A6 A6              TEXT "{BLUE}{166}{166}{166}{166}{166}{166}{166}{166}      {166}{166}{166}{166}{166}{166}{166}{166}{RETURN}"
+01301  1CF5  00                    BYTE 0
+01302  1CF6             
+01303  1CF6  93 13 11   TITLE_TEXT TEXT "{CLEAR}{HOME}{DOWN*2}{BLUE}VIKANOID 2{HOME}{RETURN}{RETURN}{RETURN}{REVERSE ON}E{REVERSE OFF} - EXPLOSION{RETURN}{REVERSE ON}P{REVERSE OFF} - POINTS{RETURN}{REVERSE ON}F{REVERSE OFF} - FIRE{RETURN}{RETURN}SPACE TO LAUNCH BALL"
+01304  1D46  00                    BYTE 0
+01305  1D47             
+01306  1D47  13 11 11   GAME_OVER_TEXT TEXT "{HOME}{DOWN*10}{RIGHT*5}GAME OVER"
+01307  1D60  00                    BYTE 0
+01308  1D61  0D 0D 50   PRESS_RETURN_TEXT TEXT "{RETURN}{RETURN}PRESS RETURN TO START"
+01309  1D78  00                    BYTE 0
+01310  1D79             
+01311  1D79             
+01312  1D79             
+
+******* 167 Label(s) *******
+ADD_SCORE_10 = $1733 
+ADD_SCORE_100 = $174F 
+ANIMATE_EXPLOSION = $1527 
+ANIMATE_EXPLOSION_CHARACTERS = $1531 
+ANIMATE_EXPLOSION_ROW = $154B 
+ANIMATE_EXPLOSION_SQUARE = $1554 
+BALL_CHAR = $1809 
+BALL_CHARS = $180A 
+BALL_DIRECTION = $1810 
+BALL_GO_DOWN = $1205 
+BALL_GO_LEFT = $11E4 
+BALL_GO_RIGHT = $11D7 
+BALL_GO_UP = $1212 
+BALL_HIT_COUNT = $1826 
+BALL_HIT_PADDLE = $13E7 
+BALL_MISSED = $140E 
+BALL_MISSED_DELAY = $13B3 
+BALL_MISSED_DELAY_LOOP = $13B5 
+BALL_MISSED_LEAVE_DELAY = $13C5 
+BALL_SPEED = $1825 
+BALL_X = $1805 
+BALL_X_POSITION_OK = $11F2 
+BALL_Y = $1806 
+BALL_Y_POSITION_OK = $1222 
+BLOCK_HIT = $1728 
+CALC_HORIZONTAL_BALL_CHAR = $1236 
+CALC_REAL_BALL_Y = $1225 
+CHANGE_BALL_DIRECTION_X = $1248 
+CHANGE_BALL_DIRECTION_Y = $125B 
+CHECK_CHECKED = $14AB 
+CHECK_COLLISION = $13C6 
+CHECK_DOWN = $137C 
+CHECK_EXPLOSION = $14B5 
+CHECK_EXPLOSION_BALL_POS = $14EB 
+CHECK_EXPLOSION_ROW = $14D3 
+CHECK_EXPLOSION_SQUARE = $14E1 
+CHECK_FIRE = $14BF 
+CHECK_FOR_CONTROLS = $1362 
+CHECK_NEXT_STATE = $111B 
+CHECK_SPACE = $138F 
+CHECK_STORE_X = $1378 
+CLEAR_SCREEN = $0391 
+CLEAR_SOUND = $118B 
+COLOUR_CYCLE = $182D 
+CONTINUE_LIVES = $134E 
+DID_BALL_HIT_A_BLOCK = $1473 
+DID_BALL_HIT_PADDLE = $13D0 
+DISPLAY_LIVES = $1341 
+DISPLAY_SCORE = $1317 
+DONE_ANIMATION = $158A 
+DONE_EXPLOSION = $1523 
+DRAW = $126E 
+DRAW_DIGIT = $1334 
+DRAW_FIRE_CHAR = $1711 
+DRAW_FIRE_PADDLE = $16F6 
+DRAW_LEVEL_1 = $108C 
+DRAW_LEVEL_2 = $109A 
+DRAW_LEVEL_3 = $10A8 
+DRAW_LEVEL_4 = $10B6 
+DRAW_LEVEL_5 = $10C4 
+DRAW_LEVEL_6 = $10D2 
+DRAW_LEVEL_7 = $10E0 
+DRAW_LEVEL_8 = $10EE 
+DRAW_SC_TEXT = $1102 
+DRAWBALL = $1298 
+DRAWFINISH = $135E 
+DRAWPADDLE = $12E0 
+END_BALL_HIT_PADDLE = $140D 
+ERASEBALL = $1284 
+ERASEPADDLE = $12C7 
+EXIT_COLLISION = $14C9 
+EXIT_FIRE = $15FD 
+EXIT_MONITOR = $177C 
+EXPLOSION = $14CA 
+EXPLOSION_ANIMATION = $1828 
+EXPLOSION_CHAR = $182C 
+EXPLOSION_CHARS = $1829 
+EXPLOSION_GRID = $1827 
+FINISH_SOUND = $1196 
+FINISHED_CHECK_FOR_CONTROLS = $13B2 
+FIRE = $1590 
+FIRE_ADJUST_PADDLE = $1617 
+FIRE_CHECK_DOWN = $163E 
+FIRE_CHECK_FOR_CONTROLS = $162B 
+FIRE_CHECK_SPACE = $164C 
+FIRE_DONE = $1627 
+FIRE_ERASE_BALL = $159A 
+FIRE_ERASE_PADDLE = $15C2 
+FIRE_FINISHED_CHECK_FOR_CONTROLS = $1659 
+FIRE_MAIN_LOOP = $15F0 
+GAME_OVER = $177D 
+GAME_OVER_MONITOR_KEY = $17B3 
+GAME_OVER_NEXT_CHARACTER = $17A2 
+GAME_OVER_POLL = $179F 
+GAME_OVER_TEXT = $1D47 
+GAME_STATE = $1816 
+GO_TO_NEXT_LEVEL = $1153 
+HANDLE_EXPLOSION = $14F5 
+INIT_FIRE = $15E6 
+INIT_GAME = $100F 
+INIT_LEVEL = $101F 
+LEVEL = $1819 
+LEVEL_1 = $183C 
+LEVEL_2 = $18B8 
+LEVEL_3 = $191D 
+LEVEL_4 = $1992 
+LEVEL_5 = $19FA 
+LEVEL_6 = $1AFA 
+LEVEL_7 = $1BB6 
+LEVEL_8 = $1C6E 
+LEVEL_BLOCKS = $181A 
+LEVELS_BLOCKS = $181B 
+LIVES = $1823 
+LIVES_LOOP = $1347 
+LIVES_NUMBER_OKAY = $116B 
+LOOP = $1824 
+LOWER_BALL_CHARS = $1234 
+MAIN_LOOP = $110E 
+MAIN_LOOP_BALL_MOVED = $116E 
+MAIN_LOOP_MOVE_BALL = $1125 
+MONITOR_START_KEY = $1763 
+MOVE_BALL_TO_LAUNCH = $1197 
+MOVE_BALL_Y = $11FB 
+MOVE_FREE_BALL = $11CA 
+NEW_ANIMATE_EXPLOSION_ROW = $1586 
+NEW_EXPLOSION_ROW = $151F 
+NEXT_EXPLOSION_SPOT = $1506 
+OLD_BALL_X = $180E 
+OLD_BALL_Y = $180F 
+OLD_PADDLE_X = $1812 
+PADDLE = $12BC 
+PADDLE_X = $1811 
+PRESS_RETURN_TEXT = $1D61 
+PRINT_TEXT = $0384 
+REAL_BALL_X = $1807 
+REAL_BALL_Y = $1808 
+RESTORE_LDA_MONITOR = $177A 
+RIGHT_BALL_CHARS = $1241 
+SCORE = $1813 
+SCORE_DRAWN = $1341 
+SCORE_LOOP = $131B 
+SCORE_TEXT = $1835 
+SETUP_LEVEL = $10FC 
+SHOOT = $165A 
+SHOOT_DONE = $16F0 
+SHOOT_LASER_BEAM = $1689 
+SHOOT_LASER_BEAM_DONE = $16C0 
+SHOOT_LASER_BEAM_ERASE = $16C2 
+SHOOT_LOOP_CHECK = $165C 
+SHOOT_LOOP_CHECK_DONE = $1682 
+SOUND_LENGTH = $1817 
+SOUND_MANAGE = $1177 
+SOUND_NOTE = $1818 
+START = $033C 
+TEXT_FINISHED = $0390 
+TITLE_NEXT_CHARACTER = $0370 
+TITLE_POLL = $0363 
+TITLE_POLL_KEYBOARD = $0377 
+TITLE_SCREEN = $0344 
+TITLE_TEXT = $1CF6 
+TITLE_WAIT = $035F 
+WAITFORBLANK = $0397 
+WAITFORNOTBLANK = $03A0 
+WRITE_TEXT = $0386 
+YCOL_HI = $17EE 
+YPOS_HI = $17C0 
+YPOS_LOW = $17D7 
+
+******* 14 Unused label(s) *******
+CALC_REAL_BALL_Y
+DISPLAY_LIVES
+DISPLAY_SCORE
+DRAW_SC_TEXT
+DRAWFINISH
+EXIT_FIRE
+FIRE_ADJUST_PADDLE
+FIRE_ERASE_BALL
+FIRE_ERASE_PADDLE
+INIT_FIRE
+PADDLE
+START
+TITLE_SCREEN
+TITLE_WAIT
+
+******* 46 Variable(s) *******
+BLACK  = $0000
+BLUE  = $0006
+BOOM_SOUND  = $0080
+BOUNCE_SOUND  = $900C
+BOUNCE_SOUND_HORIZONTAL  = $00E6
+BOUNCE_SOUND_LENGTH  = $0002
+BOUNCE_SOUND_VERTICAL  = $00DC
+CYAN  = $0003
+DOWN_KC  = $0011
+FIRE_CHARACTER  = $001E
+GAME_OVER_COL_POS  = $96E1
+GAME_STATE_BALL_FREE  = $0002
+GAME_STATE_BALL_LAUNCH  = $0001
+GAME_STATE_FIRE  = $0003
+GAME_STATE_GAME_OVER  = $0004
+GREEN  = $0005
+LASER_SOUND_START  = $00E9
+LEVEL_1_BLOCKS  = $003C
+LEVEL_2_BLOCKS  = $0058
+LEVEL_3_BLOCKS  = $0030
+LEVEL_4_BLOCKS  = $0058
+LEVEL_5_BLOCKS  = $0047
+LEVEL_6_BLOCKS  = $0034
+LEVEL_7_BLOCKS  = $003C
+LEVEL_8_BLOCKS  = $0047
+LIVES_COL_POS  = $960D
+LIVES_POS  = $1E0D
+MAX_BALL_SPEED  = $0002
+MAX_LIVES  = $0009
+NOISE_SOUND  = $900D
+PADDLE_Y  = $0016
+PURPLE  = $0004
+RASTER  = $9004
+RED  = $0002
+RETURN_KC  = $000D
+RIGHT_KC  = $001D
+SCORE_COL_POS  = $9603
+SCORE_POS  = $1E03
+SPACE_KC  = $0020
+SPEED_UP_COUNT  = $000A
+tgt_vic20  = $0001
+TITLE_COL_POS  = $962C
+VOLUME  = $900E
+VOLUME_VALUE  = $000F
+WHITE  = $0001
+YELLOW  = $0007
+******* 20 Unused variables(s) *******
+CYAN
+GAME_OVER_COL_POS
+GREEN
+LEVEL_1_BLOCKS
+LEVEL_2_BLOCKS
+LEVEL_3_BLOCKS
+LEVEL_4_BLOCKS
+LEVEL_5_BLOCKS
+LEVEL_6_BLOCKS
+LEVEL_7_BLOCKS
+LEVEL_8_BLOCKS
+LIVES_COL_POS
+LIVES_POS
+PURPLE
+SCORE_COL_POS
+SCORE_POS
+tgt_vic20
+TITLE_COL_POS
+WHITE
+YELLOW
+
