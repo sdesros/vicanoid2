@@ -1,4 +1,4 @@
-; This version introduces handling of the "F"
+; This version adds additional reactions to ball missing the paddle and speeds up the paddleS fix mario checked boxes and background colour to work with yellow characters
 ; CONSTANTS
 RASTER=$9004
 
@@ -42,6 +42,8 @@ FIRE_CHARACTER=30 ; ^ CHARACTER
 *=828 ; MAKE USE OF 190 EXTRA BYTES BY USING UP THE CASETTE BUFFER
 
 START                   
+        LDA #235
+        STA 36879
         JSR CLEAR_SCREEN
         JSR INIT_GAME
         JMP MAIN_LOOP
@@ -92,7 +94,6 @@ INIT_GAME               ; WHEN STARTING A NEW GAME
         STA SCORE       ; SET ALL OF THE SCORE BYTES TO 0
         STA SCORE+1
         STA SCORE+2
-        LDA #1
         STA LEVEL
 INIT_LEVEL                              ; WHEN STARTING A NEW LEVEL
         LDA #GAME_STATE_BALL_LAUNCH     ; RESET THE BALL TO LAUNCH MODE
@@ -486,6 +487,11 @@ CHECK_FOR_CONTROLS
         INX             ; INCREASE POSITION BY 1
         CPX #20         
         BEQ FINISHED_CHECK_FOR_CONTROLS ; IF PADDLE IS AT RIGHT EDGE LEAVE
+        INX             ; INCREASE POSITION BY 1
+        CPX #20
+        BNE CHECK_STORE_X
+        LDX #19
+CHECK_STORE_X
         STX PADDLE_X    ; STASH
         RTS
 CHECK_DOWN
@@ -494,6 +500,9 @@ CHECK_DOWN
         LDX PADDLE_X   
         DEX               ; DECREASE PADDLE
         BMI FINISHED_CHECK_FOR_CONTROLS ; IF PAST LEFT EDGE DON'T SAVE
+        DEX
+        BPL CHECK_STORE_X
+        LDX #0
         STX PADDLE_X
         RTS
 CHECK_SPACE
@@ -515,6 +524,21 @@ CHECK_SPACE
 FINISHED_CHECK_FOR_CONTROLS
         RTS
 
+
+BALL_MISSED_DELAY
+        LDX #4
+BALL_MISSED_DELAY_LOOP
+        DEX
+        BMI BALL_MISSED_LEAVE_DELAY
+        TXA
+        PHA
+        JSR WAITFORBLANK
+        JSR WAITFORNOTBLANK
+        PLA
+        TAX
+        JMP BALL_MISSED_DELAY_LOOP
+BALL_MISSED_LEAVE_DELAY
+        RTS
 
 CHECK_COLLISION
         LDA REAL_BALL_Y
@@ -539,6 +563,34 @@ BALL_HIT_PADDLE
 BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE HERE
         LDA #GAME_STATE_BALL_LAUNCH
         STA GAME_STATE
+        JSR DRAW
+        LDX REAL_BALL_Y
+        LDA YPOS_HI,X
+        STA $FC
+        LDA YPOS_LOW,X 
+        STA $FB
+        LDY REAL_BALL_X
+        LDA #BLACK
+        STA ($FB),Y
+        LDA #32
+        STA ($FB),Y
+        LDA #135
+        STA BOUNCE_SOUND
+        JSR BALL_MISSED_DELAY
+        LDA BALL_CHAR
+        STA ($FB),Y
+        LDA #143
+        STA BOUNCE_SOUND
+        JSR BALL_MISSED_DELAY
+        LDA #32
+        STA ($FB),Y
+        LDA #135
+        STA BOUNCE_SOUND
+        JSR BALL_MISSED_DELAY
+        LDA BALL_CHAR
+        STA ($FB),Y
+        LDA #0
+        STA BOUNCE_SOUND
         JMP EXIT_COLLISION
 DID_BALL_HIT_A_BLOCK
         LDX REAL_BALL_Y
@@ -1033,8 +1085,8 @@ LEVEL_5 TEXT "{home}{down}{reverse on}{yellow}{160}{160}{reverse off}{181}C     
         TEXT "   {reverse on}{green}{184}{184}{reverse off} {reverse on}{184}{reverse off}    {reverse on}{yellow}{187}{red}{172}{blue}{190}{184}{red}{187}{reverse off}{yellow}{187} {188}{reverse on}{185}{185}{reverse off}{190}"
         TEXT "  {reverse on}{green}{190}  {188}{172}{reverse off}     {reverse on}{blue}{190}{172} {reverse off}{return}"
         TEXT "  {reverse on}{green}{190}{reverse off}  {reverse on}{190}{reverse off}      {reverse on}{blue} {reverse off} {reverse on} {reverse off}{return}"
-        TEXT "  {reverse on}{green}{166}{166}{166}{166}{reverse off}      {reverse on}{black}{162}{reverse off} {reverse on}{162}{reverse off}{return}"
-        TEXT "            {reverse on}{green}{166}{166}{166}{reverse off}"
+        TEXT "  {reverse off}{green}{166}{166}{166}{166}{reverse off}      {reverse on}{black}{162}{reverse off} {reverse on}{162}{reverse off}{return}"
+        TEXT "            {reverse off}{green}{166}{166}{166}{reverse off}"
         byte 0
 ;SCREEN 6 - Level 6 (52 blocks)
 LEVEL_6_BLOCKS=52
