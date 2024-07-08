@@ -1,4 +1,4 @@
-; This version introduces paddle that can move with cursor right and cursor down.
+; This version introduces collision with the paddle.
 ; CONSTANTS
 RASTER=$9004
 
@@ -32,14 +32,14 @@ CLEAR_SCREEN
 
 WAITFORBLANK
         SEC         ; set carry bit (in SBC the borrow bit is !carry bit)
-        LDA RASTER ; the top 8 bits of the 9 bits of raster counter (0 to 27 is blanking, shift the least significant bit and vb is 0 to 13)
+        LDA RASTER ; the top 8 bits of the 9 bits of raster counter (0 to 27 is blanking, ignoring the least significant bit and vb is 0 to 13)
         SBC $E    ; substract 14 from RASTER value
         BPL WAITFORBLANK ; if value is positive then not in blank
         RTS
 
 WAITFORNOTBLANK        
         SEC        ; set carry bit (in SBC the borrow bit is !carry bit)
-        LDA RASTER ; the top 8 bits of the 9 bits of raster counter (0 to 27 is blanking, shift the least significant bit and vb is 0 to 13)
+        LDA RASTER ; the top 8 bits of the 9 bits of raster counter (0 to 27 is blanking, ignoring the least significant bit and vb is 0 to 13)
         SBC $E    ; substract 14 from RASTER value
         BMI WAITFORNOTBLANK ; value is negative in blanking.
         RTS
@@ -52,10 +52,12 @@ WAITFORNOTBLANK
 
 
 MAIN_LOOP
-        JSR DRAW            ; DRAW EVERYTHING
-        JSR MOVE_BALL       ; MOVE BALL
+        JSR DRAW               ; DRAW EVERYTHING
+        JSR MOVE_BALL          ; MOVE BALL
+        JSR CHECK_COLLISION    ; CHECK TO SEE IF THE BALL HIT ANYTHING IN NEW LOCATION
         JSR CHECK_FOR_CONTROLS ; CHECK FOR THE CONTROLS
         JMP MAIN_LOOP
+
 
 MOVE_BALL
         LDA REAL_BALL_X
@@ -82,6 +84,7 @@ BALL_X_POSITION_OK
         STA BALL_X
         LDA REAL_BALL_Y
         STA OLD_BALL_Y
+MOVE_BALL_Y
         LDA BALL_Y
         LDA BALL_DIRECTION
         AND #2                 ; FETCH Y direction
@@ -124,6 +127,7 @@ RIGHT_BALL_CHARS
         LDA BALL_CHARS,Y ; load the correct character
         STA BALL_CHAR ; stash it
         RTS
+
 
 CHANGE_BALL_DIRECTION_X
         LDA BALL_DIRECTION
@@ -220,6 +224,7 @@ DRAWFINISH
         JSR WAITFORNOTBLANK ; FINISHED DRAW, WAIT TO MAKE SURE NO LONGER IN BLANK.
         RTS
 
+
 CHECK_FOR_CONTROLS
         JSR $FFE4       ;SCAN KEYBOARD AND PUT KEYCODE IN ACCUMULATOR
         CMP #RIGHT_KC   ;CHECK FOR RIGHT KEYCODE
@@ -239,6 +244,30 @@ CHECK_DOWN
         BMI FINISHED_LEFT ; IF PAST LEFT EDGE DON'T SAVE
         STX PADDLE_X
 FINISHED_LEFT
+        RTS
+
+
+CHECK_COLLISION
+        LDA REAL_BALL_Y
+        CMP #PADDLE_Y
+        BEQ DID_BALL_HIT_PADDLE
+        JMP EXIT_COLLISION ;; TODO: WILL NEED TO HANDLE HITTING A BLOCK
+DID_BALL_HIT_PADDLE
+        LDX PADDLE_X
+        CPX REAL_BALL_X
+        BEQ BALL_HIT_PADDLE
+        INX 
+        CPX REAL_BALL_X
+        BEQ BALL_HIT_PADDLE
+        INX
+        CPX REAL_BALL_X
+        BEQ BALL_HIT_PADDLE
+        JMP BALL_MISSED
+BALL_HIT_PADDLE
+        JSR CHANGE_BALL_DIRECTION_Y
+        JSR MOVE_BALL_Y
+BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE.
+EXIT_COLLISION
         RTS
 
 
