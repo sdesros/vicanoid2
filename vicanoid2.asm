@@ -1,4 +1,4 @@
-; This version introduces different levels
+; This version introduces handling of the "P" blocks and "checked" blocks
 ; CONSTANTS
 RASTER=$9004
 
@@ -555,11 +555,22 @@ DID_BALL_HIT_A_BLOCK
         BEQ EXIT_COLLISION  ; BALL GRAPHIC IGNORE
         PHA                     ; STASH FOR SAFE KEEPING
         JSR ADD_SCORE_10        ; FOR NOW ADD SCORE AND CHANGE DIRECTION\
-        JSR CHANGE_BALL_DIRECTION_y
+        JSR CHANGE_BALL_DIRECTION_Y
         LDX LEVEL_BLOCKS        ; LOWER BLOCK REMAINING COUNT
         DEX
         STX LEVEL_BLOCKS        
         PLA                     ; READ IT FOR LATER.
+        CMP #$90                ; HIT THE "P" BLOCK?
+        BNE CHECK_CHECKED
+        JSR ADD_SCORE_100
+        JMP EXIT_COLLISION
+CHECK_CHECKED
+        CMP #102                ; HIT THE CHECKER BLOCKS
+        BNE CHECK_EXPLOSION
+        JSR CHANGE_BALL_DIRECTION_X
+        JMP EXIT_COLLISION
+CHECK_EXPLOSION
+        
 EXIT_COLLISION
         RTS
 
