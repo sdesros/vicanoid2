@@ -1,10 +1,14 @@
-; This version adds additional reactions to ball missing the paddle and speeds up the paddleS fix mario checked boxes and background colour to work with yellow characters
+; This version adds title, lives and game-over
+
+
+;; TODO ADD LIVES ON NEW LEVEL UP TO MAX_LIVES
 ; CONSTANTS
 RASTER=$9004
 
 GAME_STATE_BALL_LAUNCH = 1
 GAME_STATE_BALL_FREE = 2
 GAME_STATE_FIRE = 3
+GAME_STATE_GAME_OVER = 4
 
 ; POSSIBLE COLOURS
 BLACK=0
@@ -31,12 +35,18 @@ BOOM_SOUND=128
 RIGHT_KC=$1D
 DOWN_KC=$11
 SPACE_KC=$20
+RETURN_KC=13
 
 ; GAME ASSETS
 PADDLE_Y=22
 SCORE_POS=$1E03     
 SCORE_COL_POS=$9603 ; NEEDS TO MATCH SCORE_POS
 FIRE_CHARACTER=30 ; ^ CHARACTER
+LIVES_POS=$1E0D ; NEED TO REVISE
+LIVES_COL_POS=$960D ; NEEDS TO MATCH ABOVE
+TITLE_COL_POS=$962C ; COULD BE REVISED
+GAME_OVER_COL_POS=$96E1; COULD BE REVISED
+MAX_LIVES=9
 
 
 *=828 ; MAKE USE OF 190 EXTRA BYTES BY USING UP THE CASETTE BUFFER
@@ -45,6 +55,38 @@ START
         LDA #235
         STA 36879
         JSR CLEAR_SCREEN
+TITLE_SCREEN
+        LDA #>TITLE_TEXT ; hi byte
+        STA $FC
+        LDA #<TITLE_TEXT ;low byte
+        STA $FB
+        JSR PRINT_TEXT
+        LDA #>PRESS_RETURN_TEXT ; hi byte
+        STA $FC
+        LDA #<PRESS_RETURN_TEXT ;low byte
+        STA $FB
+        JSR PRINT_TEXT
+        LDA #0
+        STA LEVEL
+TITLE_WAIT
+        LDX #0
+        LDY #0
+TITLE_POLL
+        LDA COLOUR_CYCLE,X
+        STA TITLE_COL_POS,Y
+        INX
+        CPX #7
+        BNE TITLE_NEXT_CHARACTER
+        LDX #0
+TITLE_NEXT_CHARACTER
+        INY
+        CPY #8
+        BNE TITLE_POLL_KEYBOARD
+        LDY #0
+TITLE_POLL_KEYBOARD
+        JSR MONITOR_START_KEY
+        CMP #RETURN_KC
+        BNE TITLE_POLL
         JSR INIT_GAME
         JMP MAIN_LOOP
 
@@ -94,7 +136,8 @@ INIT_GAME               ; WHEN STARTING A NEW GAME
         STA SCORE       ; SET ALL OF THE SCORE BYTES TO 0
         STA SCORE+1
         STA SCORE+2
-        STA LEVEL
+        LDA #3
+        STA LIVES
 INIT_LEVEL                              ; WHEN STARTING A NEW LEVEL
         LDA #GAME_STATE_BALL_LAUNCH     ; RESET THE BALL TO LAUNCH MODE
         STA GAME_STATE              
@@ -208,6 +251,10 @@ DRAW_SC_TEXT
 MAIN_LOOP
         JSR DRAW               ; DRAW EVERYTHING
         LDA GAME_STATE
+        CMP #GAME_STATE_GAME_OVER
+        BNE CHECK_NEXT_STATE
+        JMP GAME_OVER
+CHECK_NEXT_STATE
         CMP #GAME_STATE_BALL_LAUNCH
         BNE MAIN_LOOP_MOVE_BALL
         JSR MOVE_BALL_TO_LAUNCH
@@ -474,6 +521,24 @@ DRAW_DIGIT
         DEY
         RTS
 SCORE_DRAWN
+DISPLAY_LIVES
+        LDX #MAX_LIVES
+        LDY #0
+        LDA #32
+LIVES_LOOP
+        CPX LIVES
+        BNE CONTINUE_LIVES
+        LDA #81
+CONTINUE_LIVES
+        STA LIVES_POS,Y
+        PHA
+        LDA #BLACK
+        STA LIVES_COL_POS,Y
+        PLA
+        INY
+        DEX
+        CPX #0
+        BNE LIVES_LOOP
 DRAWFINISH
         JSR WAITFORNOTBLANK ; FINISHED DRAW, WAIT TO MAKE SURE NO LONGER IN BLANK.
         RTS
@@ -591,7 +656,13 @@ BALL_MISSED ;; NOTE: WE SHOULD LOSE A LIFE HERE
         STA ($FB),Y
         LDA #0
         STA BOUNCE_SOUND
-        JMP EXIT_COLLISION
+        LDX LIVES
+        DEX
+        STX LIVES
+        CPX #0
+        BNE EXIT_COLLISION
+        LDA #GAME_STATE_GAME_OVER
+        STA GAME_STATE
 DID_BALL_HIT_A_BLOCK
         LDX REAL_BALL_Y
         LDA YPOS_HI,X 
@@ -998,6 +1069,60 @@ ADD_SCORE_100
         CLD             ; CLEAR BINARY CODED DECIMAL
         RTS
 
+MONITOR_START_KEY
+        JSR $FFE4
+        CMP #RETURN_KC
+        BEQ EXIT_MONITOR
+        PHA
+        SEC
+        SBC #$30
+        BMI RESTORE_LDA_MONITOR ;BUTTON PRESSED UNDER 0
+        SBC #9
+        BPL RESTORE_LDA_MONITOR ;BUTTON PRESSED HIGHER THEN 8
+        CLC
+        ADC #8
+        STA LEVEL
+RESTORE_LDA_MONITOR        
+        CLC
+        PLA
+EXIT_MONITOR
+        RTS
+
+
+GAME_OVER
+        JSR DRAW
+        LDA #>GAME_OVER_TEXT
+        STA $FC
+        LDA #<GAME_OVER_TEXT
+        STA $FB
+        JSR PRINT_TEXT
+        LDA #>PRESS_RETURN_TEXT ; hi byte
+        STA $FC
+        LDA #<PRESS_RETURN_TEXT ;low byte
+        STA $FB
+        JSR PRINT_TEXT
+        LDA #0
+        STA LEVEL
+        LDX #0
+        LDY #0
+GAME_OVER_POLL
+        LDA COLOUR_CYCLE,X
+GAME_OVER_NEXT_CHARACTER
+        STA GAME_OVER_COL_POS,Y
+        INY
+        CPY #9
+        BNE GAME_OVER_NEXT_CHARACTER
+        LDY #0
+        INX
+        CPX #8
+        BNE GAME_OVER_MONITOR_KEY
+        LDX #0
+GAME_OVER_MONITOR_KEY
+        JSR MONITOR_START_KEY
+        CMP #RETURN_KC
+        BNE GAME_OVER_POLL
+        JSR INIT_GAME
+        JMP MAIN_LOOP
 
 ; ADDRESS FOR EACH SCREEN ROW (COLOUR AND POSITIONAL ADDRESS SHARE SAME LOW BYTE)
 YPOS_HI BYTE $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1E, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F, $1F 
@@ -1034,6 +1159,8 @@ SOUND_NOTE BYTE 0
 LEVEL BYTE 0
 LEVEL_BLOCKS BYTE 0
 LEVELS_BLOCKS BYTE LEVEL_1_BLOCKS,LEVEL_2_BLOCKS,LEVEL_3_BLOCKS,LEVEL_4_BLOCKS,LEVEL_5_BLOCKS,LEVEL_6_BLOCKS,LEVEL_7_BLOCKS,LEVEL_8_BLOCKS
+; LIVES
+LIVES BYTE 0
 
 ; EXPLOSION GRID
 EXPLOSION_GRID BYTE 0
@@ -1041,6 +1168,7 @@ EXPLOSION_ANIMATION BYTE 0
 EXPLOSION_CHARS BYTE 43,42,32
 EXPLOSION_CHAR BYTE 43
 
+COLOUR_CYCLE BYTE BLACK,RED,CYAN,PURPLE,GREEN,BLUE,YELLOW,WHITE
 ; TEXT
 SCORE_TEXT TEXT "{home}{black}{reverse off}sc:"
            byte 0
@@ -1123,3 +1251,13 @@ LEVEL_8 TEXT "{home}{down} {purple}UI    {162}{187}{reverse on}{184}{184}{revers
         TEXT "    {reverse on}{cyan}f{reverse off}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{166}{reverse on}f{reverse off}{return}"
         TEXT "{blue}{166}{166}{166}{166}{166}{166}{166}{166}      {166}{166}{166}{166}{166}{166}{166}{166}{return}"
         byte 0
+
+TITLE_TEXT TEXT "{clear}{home}{down*2}{blue}vikanoid 2{home}{return}{return}{return}{reverse on}e{reverse off} - explosion{return}{reverse on}p{reverse off} - points{return}{reverse on}f{reverse off} - fire{return}{return}space to launch ball"
+           byte 0
+
+GAME_OVER_TEXT TEXT "{home}{down*10}{right*5}game over"
+               byte 0 
+PRESS_RETURN_TEXT TEXT "{return}{return}press return to start"
+                 byte 0
+
+
