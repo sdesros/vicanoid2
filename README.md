@@ -3,7 +3,7 @@ A game written in Assembly for the unexpected VIC-20.
 ![screenshot](https://sdesros.ca/vic20/content/vicanoid2-16.png)
 
 # About the game
-This is the first game I wrote in Assembly back drawing inspiration from the (8 bit show and tell)[https://www.youtube.com/c/8bitshowandtell] videos about assembly programming for C=64.  I started to work on a follow-up to my last VIC-20 game written in basic back in 1987 [Vikanoid](https://github.com/sdesros/VICanoid)
+This is the first game I wrote in Assembly back drawing inspiration from the [8 bit show and tell](https://www.youtube.com/c/8bitshowandtell) video series about assembly programming for C=64.  I started to work on a follow-up to my last VIC-20 game written in basic back in 1987 [Vikanoid](https://github.com/sdesros/VICanoid)
 
 This game features 8 new levels.
 
